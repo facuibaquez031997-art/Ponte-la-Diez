@@ -1,0 +1,110 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  PLAYER
+  OWNER
+}
+
+enum TurnoState {
+  FREE
+  RESERVED
+  BLOCKED
+}
+
+enum ReservaState {
+  PENDING
+  CONFIRMED
+  CANCELLED
+}
+
+enum PaymentState {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model User {
+  id               String             @id @default(uuid())
+  nombre           String
+  email            String             @unique
+  passwordHash     String
+  rol              Role               @default(PLAYER)
+  telefono         String?
+  barrioPontevedra String?
+  createdAt        DateTime           @default(now())
+  canchas          Cancha[]           @relation("OwnerCanchas")
+  reservas         Reserva[]
+  convocatorias    Convocatoria[]
+  subscriptions    PushSubscription[]
+}
+
+model Cancha {
+  id             String         @id @default(uuid())
+  ownerId        String
+  owner          User           @relation("OwnerCanchas", fields: [ownerId], references: [id])
+  nombre         String
+  direccion      String
+  tipoSuperficie String
+  precioHora     Float
+  montoSena      Float
+  turnos         Turno[]
+  convocatorias  Convocatoria[]
+}
+
+model Turno {
+  id              String     @id @default(uuid())
+  canchaId        String
+  cancha          Cancha     @relation(fields: [canchaId], references: [id])
+  fechaHoraInicio DateTime
+  fechaHoraFin    DateTime
+  estado          TurnoState @default(FREE)
+  reserva         Reserva?
+}
+
+model Reserva {
+  id         String       @id @default(uuid())
+  turnoId    String       @unique
+  turno      Turno        @relation(fields: [turnoId], references: [id])
+  userId     String
+  user       User         @relation(fields: [userId], references: [id])
+  estado     ReservaState @default(PENDING)
+  montoTotal Float
+  pago       Pago?
+}
+
+model Pago {
+  id             String       @id @default(uuid())
+  reservaId      String       @unique
+  reserva        Reserva      @relation(fields: [reservaId], references: [id])
+  mpPreferenceId String?
+  mpPaymentId    String?
+  estadoPago     PaymentState @default(PENDING)
+  monto          Float
+}
+
+model Convocatoria {
+  id                 String   @id @default(uuid())
+  creadorId          String
+  creador            User     @relation(fields: [creadorId], references: [id])
+  canchaId           String?
+  cancha             Cancha?  @relation(fields: [canchaId], references: [id])
+  fechaHora          DateTime
+  jugadoresFaltantes Int
+  estado             String   @default("ABIERTA")
+}
+
+model PushSubscription {
+  id        String @id @default(uuid())
+  userId    String
+  user      User   @relation(fields: [userId], references: [id])
+  endpoint  String
+  keysP256  String
+  keysAuth  String
+}

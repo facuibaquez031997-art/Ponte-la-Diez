@@ -277,3 +277,5 @@ Respetar estrictamente el diseño de Stitch: Antes de crear un componente UI, ve
 TypeScript Estricto: Evitar el uso de any. Definir DTOs en NestJS e Interfaces/Types en React.
 
 Respuesta Modular: Cada vez que desarrolles una tarea, crea o edita exclusivamente los archivos pertenecientes al módulo actual del flujo.
+
+Primero verificar que funcione de manera perfecta y esperar verificación del programador para el despliegue en producción.

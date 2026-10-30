@@ -1,87 +1,64 @@
-# 🏟️ Pontevedra Fútbol App (MVP)
+# ⚽️ Ponte la 10
 
-Aplicación web para la gestión de reservas de canchas, pagos online y organización de partidos en Pontevedra.  
-Este proyecto está desarrollado con **React + TypeScript + TailwindCSS + react-router-dom** en el frontend, y se integra con un backend en **Node.js/Express + PostgreSQL**.
+Aplicación web para reservar canchas de fútbol en Pontevedra (Buenos Aires, Argentina): turnos con seña o pago total por Mercado Pago, y convocatorias sociales "Falta Uno" con notificaciones push.
 
----
+- Fuente de la verdad del proyecto: [`CLAUDE.md`](./CLAUDE.md)
+- Arquitectura y decisiones técnicas: [`ARCHITECTURE.md`](./ARCHITECTURE.md)
+- Estado y plan de fases: [`ROADMAP.md`](./ROADMAP.md)
+- Diseño: Stitch `18292400609503454593` (principal) y [Figma](https://www.figma.com/make/czrb6t3ffAcIK9gQkYSegq/Ponte-la-10-app?fullscreen=1&t=8VRNi7RmFBArlXIl-1&code-node-id=0-6) (complementario)
 
-## 🚀 Alcance del MVP
+## Alcance del MVP
 
-### Incluido en el MVP
-- 💳 **Pasarela de Pagos (Mercado Pago API)**: Cobro de seña o reserva completa al confirmar turno.
-- 🔔 **Notificaciones Push (Web Push API / Service Workers)**: Alertas cuando falta gente en un partido, alguien se suma a tu convocatoria o se confirma una reserva.
-- 🏟️ **Gestión de Canchas y Turnos**: Publicación de canchas, horarios disponibles y reservas.
-- 👥 **Módulo Social (Convocatorias “Falta Uno”)**: Organización de partidos y búsqueda de jugadores.
+- Registro/login con roles `PLAYER` y `OWNER`.
+- Gestión de canchas y turnos (disponibilidad, bloqueo).
+- Reservas con pago por Mercado Pago (Checkout Pro + webhooks).
+- Convocatorias "Falta Uno" y notificaciones Web Push.
 
-### Post-MVP (Fase 2)
-- ❌ Módulo de Torneos, Fixtures y Tablas de Posiciones.
+Fuera del MVP: torneos, fixtures y tablas de posiciones.
 
----
+## Stack
 
-## 🗄️ Modelo de Datos (PostgreSQL)
+| Capa | Tecnología |
+| --- | --- |
+| Backend | NestJS (adaptador Express), Prisma 6, PostgreSQL |
+| Frontend | React, Vite, TypeScript, TailwindCSS, react-router-dom, Axios |
+| Pagos | Mercado Pago |
+| Push | `web-push` + Service Worker |
 
-Tablas principales:
-- **Users**: id, nombre, email, password_hash, rol (jugador/dueño), telefono, barrio_pontevedra.
-- **Canchas**: id, owner_id, nombre, direccion, tipo_superficie, precio_hora, monto_sena.
-- **Turnos**: id, cancha_id, fecha_hora_inicio, fecha_hora_fin, estado (libre, reservado, bloqueado).
-- **Reservas**: id, turno_id, user_id, estado (pendiente, confirmada, cancelada), monto_total.
-- **Pagos**: id, reserva_id, mp_preference_id, mp_payment_id, estado_pago (pending, approved, rejected), monto.
-- **Convocatorias_Partidos**: id, creador_id, cancha_id (opcional), fecha_hora, jugadores_faltantes, estado.
-- **Push_Subscriptions**: id, user_id, endpoint, keys_p256dh, keys_auth.
+## Estructura
 
----
+```
+apps/server   API NestJS + Prisma (prisma/schema.prisma)
+apps/client   SPA React + Vite
+```
 
-## ⚙️ Arquitectura e Integraciones
+## Puesta en marcha
 
-- **Frontend**: React + TypeScript + TailwindCSS + react-router-dom.
-- **Backend**: Node.js/Express o Next.js API Routes.
-- **Base de Datos**: PostgreSQL (Prisma ORM).
-- **Pagos**: Mercado Pago Checkout Pro + Webhooks.
-- **Notificaciones**: Web Push API con librería `web-push`.
+Requisitos: Node.js >= 22, npm >= 10 y PostgreSQL >= 14.
 
----
-
-## 📅 Plan de Ejecución (Sprints)
-
-1. **Fase 1: Base de Datos, Autenticación y Roles** (Semana 1-2)  
-   - Configuración backend y DB.  
-   - Registro/Login y control de roles.
-
-2. **Fase 2: Gestión de Canchas y Turnos** (Semana 3-4)  
-   - Panel para dueños.  
-   - Búsqueda y filtrado de canchas.
-
-3. **Fase 3: Pagos con Mercado Pago** (Semana 5-6)  
-   - Integración de API y Webhooks.  
-   - Confirmación automática de reservas.
-
-4. **Fase 4: Módulo Social + Push API** (Semana 7)  
-   - Convocatorias de partidos.  
-   - Notificaciones en navegador/móvil.
-
-5. **Fase 5: Testing y Despliegue** (Semana 8)  
-   - Optimización mobile.  
-   - Deploy en Vercel/Render/Supabase.
-
----
-
-## 🛠️ Instalación y Uso
-
-### Requisitos
-- Node.js >= 18
-- PostgreSQL >= 14
-- Yarn o npm
-
-### Pasos
 ```bash
-# Clonar repositorio
-git clone https://github.com/usuario/pontevedra-futbol-app.git
-cd pontevedra-futbol-app
+npm install --legacy-peer-deps      # instala ambos workspaces desde la raíz
+cp apps/server/.env.example apps/server/.env   # y completar DATABASE_URL
+cp apps/client/.env.example apps/client/.env
 
-# Instalar dependencias
-npm install
+npm run db:generate                 # genera el cliente Prisma
+npm run db:migrate                  # aplica migraciones (requiere PostgreSQL en marcha)
 
-# Levantar frontend
-npm run dev
+npm run dev:server                  # API en http://localhost:3000/api
+npm run dev:client                  # SPA en http://localhost:5173
+```
 
-https://www.figma.com/make/czrb6t3ffAcIK9gQkYSegq/Ponte-la-10-app?fullscreen=1&t=8VRNi7RmFBArlXIl-1&code-node-id=0-6
+Comprobación rápida: `GET http://localhost:3000/api/health` devuelve el estado de la API y de la base.
+
+`--legacy-peer-deps` es necesario: `npm install` a secas falla con un bug de npm (`edgesOut`) sobre este workspace.
+
+## Scripts (raíz)
+
+| Script | Qué hace |
+| --- | --- |
+| `npm run build` | Compila server y client |
+| `npm run lint` | Lint de ambos |
+| `npm test` | Tests del server |
+| `npm run db:generate` / `db:migrate` | Prisma |
+
+Los commits siguen Conventional Commits (commitlint + husky en la raíz).
