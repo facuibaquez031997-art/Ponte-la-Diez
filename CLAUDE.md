@@ -279,3 +279,10 @@ TypeScript Estricto: Evitar el uso de any. Definir DTOs en NestJS e Interfaces/T
 Respuesta Modular: Cada vez que desarrolles una tarea, crea o edita exclusivamente los archivos pertenecientes al módulo actual del flujo.
 
 Primero verificar que funcione de manera perfecta y esperar verificación del programador para el despliegue en producción.
+
+📋 Pendientes Pre-Despliegue (REGLA OBLIGATORIA)
+
+- El archivo `PENDIENTES_PRE_DESPLIEGUE.md` en la raíz es la lista numerada de recomendaciones hechas durante el desarrollo.
+- Cada vez que Claude le haga una recomendación al programador (seguridad, deuda técnica, mejoras para producción), debe agregarla a ese archivo con un número nuevo.
+- Antes de proponer o ejecutar cualquier despliegue a producción, Claude debe avisar al programador y repasar los pendientes que sigan en estado ⏳.
+- Al finalizar el proyecto, Claude debe recordarle al programador que presente esa lista a su jefe (en particular el punto 1: registro de `OWNER` sin verificación).
