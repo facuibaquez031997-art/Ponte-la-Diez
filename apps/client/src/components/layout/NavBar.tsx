@@ -1,43 +1,98 @@
 import { Link } from 'react-router-dom'
 import logo from '../../assets/logo.png'
+import { useAuth } from '../../hooks/useAuth'
+import type { Role } from '../../types/auth'
+
+const NAV_LINKS = [
+  { label: 'Explorar canchas', to: '/canchas' },
+  { label: 'Falta uno', to: '#' },
+  { label: 'Mis reservas', to: '#' },
+  { label: 'Mensajes', to: '#' },
+]
+
+const ROLE_LABELS: Record<Role, string> = {
+  PLAYER: 'Jugador',
+  OWNER: 'Dueño',
+}
 
 const NavBar = () => {
+  const { user, logout } = useAuth()
+
   return (
-    <div>
-      <nav className="flex justify-between items-center bg-blue-950 ">
-        <div className="flex justify-around items-center">
-          <img
-            src={logo}
-            alt="logo"
-            className="ml-3 justify-around rounded-2xl w-25 h-25 mt-2 mb-2 shadow-2xl"
-          />
-          <div className="ml-3">
-            <h1 className="font-bold  text-2xl text-gray-400">
-              PONTE LA <strong className="text-blue-400">DIEZ</strong>
-            </h1>
-            <p className="text-gray-400">Canchas y Partidos</p>
-          </div>
+    <header className="sticky top-0 z-50 bg-primary-container shadow-[0_4px_20px_rgba(8,29,47,0.35)]">
+      <div className="mx-auto flex h-16 max-w-[1280px] items-center justify-between px-4 md:px-8 lg:px-12">
+        <div className="flex items-center gap-6">
+          <Link to="/" className="flex items-center gap-2 focus:outline-none">
+            <img src={logo} alt="" className="h-10 w-10 rounded-xl object-contain" />
+            <span className="font-display text-headline-md uppercase tracking-wider text-on-primary">
+              Ponte la
+            </span>
+            <span className="font-display text-headline-md uppercase tracking-wider text-secondary-container">
+              Diez
+            </span>
+          </Link>
+
+          <nav aria-label="Principal" className="hidden items-center gap-6 lg:flex">
+            {NAV_LINKS.map(({ label, to }) => (
+              <Link
+                key={label}
+                to={to}
+                className="font-semibold text-on-primary-container transition-colors hover:text-on-primary"
+              >
+                {label}
+              </Link>
+            ))}
+          </nav>
         </div>
 
-        <div className="mr-3">
-          <Link className="mr-5 hover:bg-blue-500 border-solid rounded-2xl p-3" to="#">
-            Explorar canchas
-          </Link>
-          <Link className="mr-5  hover:bg-blue-500 border-solid rounded-2xl p-3" to="#">
-            Partidos
-          </Link>
-          <Link className="mr-5  hover:bg-blue-500 border-solid rounded-2xl p-3" to="#">
-            Mis Reservas
-          </Link>
-          <Link className="mr-5  hover:bg-blue-500 border-solid rounded-2xl p-3" to="#">
-            Mensajes
-          </Link>
-          <Link className="mr-5" to="#">
-            Perfil
-          </Link>
+        <div className="flex items-center gap-3">
+          {user ? (
+            <>
+              <div className="flex items-center gap-2 rounded-full bg-surface-tint/25 py-1 pl-2 pr-4">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-black">
+                  <span
+                    aria-hidden="true"
+                    className="material-symbols-outlined text-[18px] text-on-primary"
+                  >
+                    person
+                  </span>
+                </div>
+                <div className="hidden flex-col text-left sm:flex">
+                  <span className="text-xs font-semibold leading-tight text-on-primary">
+                    {user.nombre}
+                  </span>
+                  <span className="text-[10px] font-semibold uppercase leading-none tracking-wider text-secondary-container">
+                    {ROLE_LABELS[user.rol]}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={logout}
+                className="rounded-full px-4 py-2 text-sm font-semibold text-on-primary-container transition-all hover:bg-surface-tint/20 hover:text-on-primary active:scale-[0.98]"
+              >
+                Salir
+              </button>
+            </>
+          ) : (
+            <>
+              <Link
+                to="/login"
+                className="rounded-full px-4 py-2 text-sm font-semibold text-on-primary-container transition-all hover:bg-surface-tint/20 hover:text-on-primary active:scale-[0.98]"
+              >
+                Ingresar
+              </Link>
+              <Link
+                to="/registro"
+                className="rounded-full bg-secondary-container px-5 py-2 text-sm font-bold text-on-secondary-fixed transition-all hover:bg-secondary-fixed-dim active:scale-[0.98]"
+              >
+                Registrarse
+              </Link>
+            </>
+          )}
         </div>
-      </nav>
-    </div>
+      </div>
+    </header>
   )
 }
 

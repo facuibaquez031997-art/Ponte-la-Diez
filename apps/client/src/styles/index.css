@@ -1,9 +1,85 @@
 @import "tailwindcss";
 
-@layer base{
-  body{
-    font-family: system-ui, -apple-system, sans-serif;
+@theme {
+  --font-sans: "DM Sans", system-ui, sans-serif;
+  --font-display: "Barlow Condensed", system-ui, sans-serif;
+
+  --color-background: #f5fafd;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #eff4f7;
+  --color-surface-container: #eaeff2;
+  --color-surface-dim: #d6dbde;
+  --color-surface-bright: #f5fafd;
+  --color-on-surface: #171c1f;
+  --color-on-surface-variant: #43474c;
+  --color-primary-container: #081d2f;
+  --color-on-primary-container: #73869c;
+  --color-surface-tint: #4d6075;
+  --color-primary-fixed-dim: #b5c8e0;
+  --color-on-primary: #ffffff;
+  --color-on-primary-fixed-variant: #36485c;
+  --color-secondary: #00668a;
+  --color-secondary-container: #40c2fd;
+  --color-secondary-fixed: #c4e7ff;
+  --color-secondary-fixed-dim: #7bd0ff;
+  --color-on-secondary-fixed: #001e2c;
+  --color-on-secondary-container: #004d6a;
+  --color-on-secondary: #ffffff;
+  --color-surface-container-high: #e4e9ec;
+  --color-outline-variant: #c4c6cd;
+  --color-tertiary-fixed: #ffdbca;
+  --color-on-tertiary-fixed: #341100;
+  --color-error: #ba1a1a;
+  --color-error-container: #ffdad6;
+  --color-on-error-container: #93000a;
+
+  --text-display-hero: 56px;
+  --text-display-hero--line-height: 56px;
+  --text-display-hero--letter-spacing: 0.02em;
+  --text-display-hero--font-weight: 800;
+  --text-headline-lg: 36px;
+  --text-headline-lg--line-height: 38px;
+  --text-headline-lg--letter-spacing: 0.02em;
+  --text-headline-lg--font-weight: 800;
+  --text-title-md: 18px;
+  --text-title-md--line-height: 24px;
+  --text-title-md--font-weight: 700;
+  --text-headline-md: 24px;
+  --text-headline-md--line-height: 28px;
+  --text-headline-md--letter-spacing: 0.01em;
+  --text-headline-md--font-weight: 700;
+  --text-headline-sm: 20px;
+  --text-headline-sm--line-height: 24px;
+  --text-headline-sm--letter-spacing: 0.01em;
+  --text-headline-sm--font-weight: 700;
+  --text-eyebrow-badge: 13px;
+  --text-eyebrow-badge--line-height: 16px;
+  --text-eyebrow-badge--letter-spacing: 0.12em;
+  --text-eyebrow-badge--font-weight: 800;
+  --text-label-sm: 11px;
+  --text-label-sm--line-height: 14px;
+  --text-label-sm--letter-spacing: 0.04em;
+  --text-label-sm--font-weight: 700;
+}
+
+@layer base {
+  body {
+    font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
+}
+
+.material-symbols-outlined {
+  font-family: "Material Symbols Outlined";
+  font-weight: normal;
+  font-style: normal;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  -webkit-font-feature-settings: "liga";
+  font-feature-settings: "liga";
+  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
 }
