@@ -6,6 +6,7 @@ import {
   IsString,
   Max,
   Min,
+  MinLength,
   validateSync,
 } from 'class-validator'
 
@@ -21,9 +22,9 @@ export class EnvironmentVariables {
   @IsString()
   DATABASE_URL: string
 
-  @IsOptional()
   @IsString()
-  JWT_SECRET?: string
+  @MinLength(16)
+  JWT_SECRET: string
 
   @IsOptional()
   @IsString()

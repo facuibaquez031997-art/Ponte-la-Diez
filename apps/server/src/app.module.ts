@@ -5,12 +5,14 @@ import { PrismaModule } from './common/prisma/prisma.module.js'
 import { validateEnv } from './config/env.config.js'
 import { EngramModule } from './engram/engram.module.js'
 import { GentleAiModule } from './gentle-ai/gentle-ai.module.js'
+import { AuthModule } from './modules/auth/auth.module.js'
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
     PrismaModule,
     HealthModule,
+    AuthModule,
     EngramModule,
     GentleAiModule,
   ],
