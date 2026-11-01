@@ -278,7 +278,7 @@ TypeScript Estricto: Evitar el uso de any. Definir DTOs en NestJS e Interfaces/T
 
 Respuesta Modular: Cada vez que desarrolles una tarea, crea o edita exclusivamente los archivos pertenecientes al módulo actual del flujo.
 
-Primero verificar que funcione de manera perfecta y esperar verificación del programador para el despliegue en producción.
+Primero verificar que funcione de manera perfecta y esperar verificación del programador para el despliegue en producción.engra
 
 📋 Pendientes Pre-Despliegue (REGLA OBLIGATORIA)
 
