@@ -1,4 +1,5 @@
 import { IsEmail, IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator'
+import { BARRIOS } from '../../users/barrios.js'
 
 export class RegisterDto {
   @IsString()
@@ -24,7 +25,6 @@ export class RegisterDto {
   telefono?: string
 
   @IsOptional()
-  @IsString()
-  @MaxLength(80)
+  @IsIn(BARRIOS)
   barrioPontevedra?: string
 }

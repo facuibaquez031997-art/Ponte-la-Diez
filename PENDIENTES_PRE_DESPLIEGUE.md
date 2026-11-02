@@ -12,11 +12,15 @@ Estados: ⏳ Pendiente · ✅ Resuelto · ➖ Aceptado como está (anotar motivo
 | 4 | 1 - Auth | Agregar límite de intentos (rate limiting) a login y registro | ⏳ |
 | 5 | 1 - Dependencias | Revisar `npm audit` y corregir vulnerabilidades | ⏳ |
 | 6 | 1 - Tests | Corregir el error de tipos `supertest/types` en `test/app.e2e-spec.ts` | ⏳ |
-| 7 | 1 - Stitch | Rotar la API key de Stitch, que quedó expuesta en texto plano en una sesión de trabajo | ⏳ |
+| 7 | 1 - Stitch | Rotar la API key de Stitch, que quedó expuesta en texto plano en el chat (dos veces) | ⏳ |
 | 8 | 1 - Base de datos | Borrar el usuario de prueba `test.client@example.com` de la base de desarrollo | ⏳ |
 | 9 | 1 - Base de datos | Borrar también el usuario de prueba `claude.test@example.com` de la base de desarrollo | ⏳ |
 | 10 | 2 - Canchas | Reemplazar los datos de ejemplo de "Explorar canchas" (`exploreSampleData.ts`) por la API real de canchas, turnos y convocatorias | ⏳ |
 | 11 | 2 - Canchas | El texto "Reserva protegida" (seña en custodia, cancelación gratuita hasta 4 h) viene del diseño de Stitch: definir la política real o quitarlo antes de publicar | ⏳ |
+| 12 | 4 - Falta Uno | Límite de frecuencia para enviar avisos de "falta un jugador" y opción para que cada jugador silencie avisos (evitar spam al barrio) | ⏳ |
+| 13 | 1 - Usuarios | Pasar `barrioPontevedra` de texto libre a una lista fija de barrios, para que coincidan los destinatarios de los avisos | ⏳ |
+| 14 | 4 - Push | Bandeja de notificaciones dentro de la app como respaldo del push (permiso rechazado o iPhone sin instalar la app en la pantalla de inicio) | ⏳ |
+| 15 | 2 - Fotos | Subida de fotos: validar tipo y tamaño en el servidor (no solo en el navegador), firmar las subidas a la nube, guardar las credenciales del proveedor solo en `.env` y definir cómo se moderan las fotos reportadas | ⏳ |
 
 ---
 

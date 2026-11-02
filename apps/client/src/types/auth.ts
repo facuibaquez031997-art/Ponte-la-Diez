@@ -19,6 +19,12 @@ export interface LoginPayload {
   password: string
 }
 
+export interface UpdateProfilePayload {
+  nombre?: string
+  telefono?: string
+  barrioPontevedra?: string
+}
+
 export interface RegisterPayload {
   nombre: string
   email: string

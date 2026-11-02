@@ -6,6 +6,7 @@ import { validateEnv } from './config/env.config.js'
 import { EngramModule } from './engram/engram.module.js'
 import { GentleAiModule } from './gentle-ai/gentle-ai.module.js'
 import { AuthModule } from './modules/auth/auth.module.js'
+import { UsersModule } from './modules/users/users.module.js'
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { AuthModule } from './modules/auth/auth.module.js'
     PrismaModule,
     HealthModule,
     AuthModule,
+    UsersModule,
     EngramModule,
     GentleAiModule,
   ],
