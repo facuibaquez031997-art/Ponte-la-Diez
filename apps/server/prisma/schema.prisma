@@ -38,6 +38,7 @@ model User {
   rol              Role               @default(PLAYER)
   telefono         String?
   barrioPontevedra String?
+  avatarUrl        String?
   createdAt        DateTime           @default(now())
   canchas          Cancha[]           @relation("OwnerCanchas")
   reservas         Reserva[]

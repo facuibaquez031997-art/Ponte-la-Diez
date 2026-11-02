@@ -12,7 +12,7 @@ Branch: feat/perfil-falta-uno (to create at first work-unit commit) · Delivery:
 
 ## Tasks
 - [~] T1 (S1) Profile: view/edit own data, `barrioPontevedra` from a fixed list (pending #13) · route: inline · RED: barrios.spec.ts failed on missing modules, GREEN: 8 tests pass, tsc+eslint clean · live check pending (running backend is stale, GET /api/users/barrios returns 404) · commit: -
-- [ ] T2 (S1) Profile photos: upload, list, delete · route: inline · commit: -
+- [x] T2 (S1) Profile photo (one avatar per user) on Cloudinary: signed direct upload, server-side format/size check, delete · route: inline · RED: avatar.spec.ts failed on missing modules, GREEN: 21 server tests pass, client tsc+eslint clean · live check: user confirmed the upload works ("quedo perfecto") after fixing CLOUDINARY_CLOUD_NAME · commit: feat(users) profile photo upload via Cloudinary
 - [ ] T3 (S3, S6) Schema: position, message and `alcance` on `Convocatoria`; CRUD endpoints · route: inline · commit: -
 - [ ] T4 (S2, S4) Web push: subscribe and notify same-neighborhood players, with in-app inbox (pending #14) · route: inline · commit: -
 - [ ] T5 (S2, S3) Client: "Falta uno" form in the profile · route: inline · commit: -

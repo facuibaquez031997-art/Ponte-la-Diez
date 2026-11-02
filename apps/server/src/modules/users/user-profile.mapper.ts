@@ -8,4 +8,5 @@ export const toUserProfile = (user: User): UserProfileDto => ({
   rol: user.rol,
   telefono: user.telefono,
   barrioPontevedra: user.barrioPontevedra,
+  avatarUrl: user.avatarUrl,
 })

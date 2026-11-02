@@ -7,6 +7,7 @@ export interface UserProfileDto {
   rol: Role
   telefono: string | null
   barrioPontevedra: string | null
+  avatarUrl: string | null
 }
 
 export interface AuthResponseDto {

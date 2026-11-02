@@ -1,9 +1,10 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import BarrioCombobox from '../../components/common/BarrioCombobox'
 import ConfirmDialog from '../../components/common/ConfirmDialog'
 import FormField from '../../components/common/FormField'
 import { useAuth } from '../../hooks/useAuth'
+import { AVATAR_ACCEPT, AvatarUploadError } from '../../services/avatar.service'
 import type { Role } from '../../types/auth'
 import { getAuthErrorMessage } from '../Auth/authError'
 
@@ -18,8 +19,11 @@ const completionOf = (...fields: string[]) =>
   Math.round((fields.filter((field) => field.trim() !== '').length / fields.length) * 100)
 
 const ProfilePage = () => {
-  const { user, updateProfile } = useAuth()
+  const { user, updateProfile, uploadAvatar, removeAvatar } = useAuth()
   const navigate = useNavigate()
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [photoBusy, setPhotoBusy] = useState(false)
+  const [photoError, setPhotoError] = useState<string | null>(null)
 
   const [nombre, setNombre] = useState(user?.nombre ?? '')
   const [telefono, setTelefono] = useState(user?.telefono ?? '')
@@ -33,6 +37,26 @@ const ProfilePage = () => {
 
   const completion = completionOf(nombre, telefono, barrioPontevedra)
   const roleLabel = ROLE_LABELS[user.rol]
+
+  const runPhotoAction = async (action: () => Promise<unknown>) => {
+    setPhotoError(null)
+    setPhotoBusy(true)
+    try {
+      await action()
+    } catch (err) {
+      setPhotoError(err instanceof AvatarUploadError ? err.message : getAuthErrorMessage(err))
+    } finally {
+      setPhotoBusy(false)
+    }
+  }
+
+  const handlePhotoSelected = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (file) void runPhotoAction(() => uploadAvatar(file))
+  }
+
+  const handlePhotoRemove = () => void runPhotoAction(removeAvatar)
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
@@ -118,16 +142,63 @@ const ProfilePage = () => {
             </div>
 
             <div className="relative z-10 flex flex-col items-center gap-2 py-2">
-              <div className="flex h-32 w-32 items-center justify-center rounded-full bg-gradient-to-b from-secondary-container to-surface-tint p-1 shadow-lg">
-                <div className="flex h-full w-full items-center justify-center rounded-full bg-primary-container">
-                  <span
-                    aria-hidden="true"
-                    className="material-symbols-outlined text-6xl text-on-primary-container"
-                  >
-                    person
-                  </span>
+              <div className="relative">
+                <div className="flex h-32 w-32 items-center justify-center rounded-full bg-gradient-to-b from-secondary-container to-surface-tint p-1 shadow-lg">
+                  <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-full bg-primary-container">
+                    {user.avatarUrl ? (
+                      <img
+                        src={user.avatarUrl}
+                        alt="Tu foto de perfil"
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <span
+                        aria-hidden="true"
+                        className="material-symbols-outlined text-6xl text-on-primary-container"
+                      >
+                        person
+                      </span>
+                    )}
+                  </div>
                 </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept={AVATAR_ACCEPT}
+                  className="hidden"
+                  onChange={handlePhotoSelected}
+                />
+                <button
+                  type="button"
+                  aria-label="Cambiar foto de perfil"
+                  disabled={photoBusy}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="absolute bottom-1 right-1 flex h-9 w-9 items-center justify-center rounded-full bg-secondary-container text-on-secondary-fixed shadow-md transition-transform hover:scale-105 active:scale-95 disabled:opacity-60"
+                >
+                  <span aria-hidden="true" className="material-symbols-outlined text-[18px]">
+                    {photoBusy ? 'hourglass_top' : 'photo_camera'}
+                  </span>
+                </button>
               </div>
+              <p className="text-xs text-secondary-fixed-dim">JPG, PNG o WebP hasta 5 MB</p>
+              {user.avatarUrl && (
+                <button
+                  type="button"
+                  disabled={photoBusy}
+                  onClick={handlePhotoRemove}
+                  className="text-xs font-semibold text-secondary-container underline-offset-2 hover:underline disabled:opacity-60"
+                >
+                  Quitar foto
+                </button>
+              )}
+              {photoError && (
+                <p
+                  role="alert"
+                  className="rounded-lg bg-error-container px-3 py-2 text-xs text-on-error-container"
+                >
+                  {photoError}
+                </p>
+              )}
               <h2 className="text-center font-display text-headline-lg uppercase leading-none tracking-tight text-surface-bright">
                 {nombre.trim() || 'Tu nombre'}
               </h2>

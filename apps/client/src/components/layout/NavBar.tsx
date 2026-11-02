@@ -63,13 +63,17 @@ const NavBar = () => {
                 aria-label="Mi perfil"
                 className="flex items-center gap-2 rounded-full bg-surface-tint/25 py-1 pl-2 pr-4 transition-all hover:bg-surface-tint/40"
               >
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-black">
-                  <span
-                    aria-hidden="true"
-                    className="material-symbols-outlined text-[18px] text-on-primary"
-                  >
-                    person
-                  </span>
+                <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-black">
+                  {user.avatarUrl ? (
+                    <img src={user.avatarUrl} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <span
+                      aria-hidden="true"
+                      className="material-symbols-outlined text-[18px] text-on-primary"
+                    >
+                      person
+                    </span>
+                  )}
                 </div>
                 <div className="hidden flex-col text-left sm:flex">
                   <span className="text-xs font-semibold leading-tight text-on-primary">

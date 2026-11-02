@@ -12,6 +12,8 @@ export interface AuthContextValue {
   login: (payload: LoginPayload) => Promise<UserProfile>
   register: (payload: RegisterPayload) => Promise<UserProfile>
   updateProfile: (payload: UpdateProfilePayload) => Promise<UserProfile>
+  uploadAvatar: (file: File) => Promise<UserProfile>
+  removeAvatar: () => Promise<UserProfile>
   logout: () => void
 }
 
