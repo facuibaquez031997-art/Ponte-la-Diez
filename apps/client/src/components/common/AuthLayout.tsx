@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
+import logo from '../../assets/logo.png'
 
 interface AuthLayoutProps {
   heading: string
@@ -29,15 +30,7 @@ const AuthLayout = ({ heading, subheading, children }: AuthLayoutProps) => (
 
         <div className="relative z-10 flex flex-col gap-8">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-secondary-container text-primary-container shadow-lg">
-              <span
-                aria-hidden="true"
-                className="material-symbols-outlined text-2xl"
-                style={{ fontVariationSettings: "'FILL' 1" }}
-              >
-                sports_soccer
-              </span>
-            </div>
+            <img src={logo} alt="" className="h-14 w-14 rounded-2xl object-contain" />
             <div className="flex flex-col">
               <span className="font-display text-headline-md uppercase leading-tight tracking-wider">
                 Ponte la Diez
