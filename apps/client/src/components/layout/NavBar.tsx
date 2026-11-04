@@ -4,6 +4,7 @@ import logo from '../../assets/logo.png'
 import ConfirmDialog from '../common/ConfirmDialog'
 import { useAuth } from '../../hooks/useAuth'
 import type { Role } from '../../types/auth'
+import NotificationBell from './NotificationBell'
 
 const NAV_LINKS = [
   { label: 'Explorar canchas', to: '/canchas' },
@@ -58,6 +59,7 @@ const NavBar = () => {
         <div className="flex items-center gap-3">
           {user ? (
             <>
+              <NotificationBell />
               <Link
                 to="/perfil"
                 aria-label="Mi perfil"
