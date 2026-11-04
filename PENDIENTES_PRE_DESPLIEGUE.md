@@ -21,6 +21,8 @@ Estados: ⏳ Pendiente · ✅ Resuelto · ➖ Aceptado como está (anotar motivo
 | 13 | 1 - Usuarios | Pasar `barrioPontevedra` de texto libre a una lista fija de barrios, para que coincidan los destinatarios de los avisos | ⏳ |
 | 14 | 4 - Push | Bandeja de notificaciones dentro de la app como respaldo del push (permiso rechazado o iPhone sin instalar la app en la pantalla de inicio) | ⏳ |
 | 15 | 2 - Fotos | Subida de fotos: validar tipo y tamaño en el servidor (no solo en el navegador), firmar las subidas a la nube, guardar las credenciales del proveedor solo en `.env` y definir cómo se moderan las fotos reportadas | ⏳ |
+| 16 | 1 - Base de datos | Borrar el usuario de prueba `t1.check.1793828121@example.com` creado al probar el perfil (T1) | ⏳ |
+| 17 | 4 - Falta Uno | Borrar los 4 usuarios de prueba `t3.{a,b,c,d}.1793828679@example.com` y la convocatoria de prueba creada al probar T3 | ⏳ |
 
 ---
 

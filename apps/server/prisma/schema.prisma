@@ -12,6 +12,18 @@ enum Role {
   OWNER
 }
 
+enum Posicion {
+  ARQUERO
+  DEFENSOR
+  MEDIOCAMPISTA
+  DELANTERO
+}
+
+enum Alcance {
+  BARRIO
+  CONTACTOS
+}
+
 enum TurnoState {
   FREE
   RESERVED
@@ -98,6 +110,9 @@ model Convocatoria {
   cancha             Cancha?  @relation(fields: [canchaId], references: [id])
   fechaHora          DateTime
   jugadoresFaltantes Int
+  posicion           Posicion
+  mensaje            String?
+  alcance            Alcance  @default(BARRIO)
   estado             String   @default("ABIERTA")
 }
 
