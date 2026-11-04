@@ -2,10 +2,12 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common'
 import type { Convocatoria } from '@prisma/client'
 import { PrismaService } from '../../common/prisma/prisma.service.js'
+import { NotificationsService } from '../notifications/notifications.service.js'
 import type { CreateConvocatoriaDto } from './dto/create-convocatoria.dto.js'
 
 const ESTADO_ABIERTA = 'ABIERTA'
@@ -13,7 +15,12 @@ const ESTADO_CERRADA = 'CERRADA'
 
 @Injectable()
 export class ConvocatoriasService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(ConvocatoriasService.name)
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService
+  ) {}
 
   async create(userId: string, dto: CreateConvocatoriaDto): Promise<Convocatoria> {
     const user = await this.prisma.user.findUnique({ where: { id: userId } })
@@ -27,7 +34,7 @@ export class ConvocatoriasService {
       throw new BadRequestException('La fecha del partido debe ser futura')
     }
 
-    return this.prisma.convocatoria.create({
+    const convocatoria = await this.prisma.convocatoria.create({
       data: {
         creadorId: userId,
         canchaId: dto.canchaId,
@@ -38,6 +45,12 @@ export class ConvocatoriasService {
         alcance: 'BARRIO',
       },
     })
+
+    // Fire and forget: a barrio can be large and a failing push must not undo the call.
+    this.notifications.notifyNewConvocatoria(convocatoria.id).catch((error: unknown) => {
+      this.logger.error(`Could not notify convocatoria ${convocatoria.id}`, error)
+    })
+    return convocatoria
   }
 
   async listForMyBarrio(userId: string): Promise<Convocatoria[]> {

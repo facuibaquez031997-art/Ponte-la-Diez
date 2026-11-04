@@ -23,6 +23,10 @@ Estados: ⏳ Pendiente · ✅ Resuelto · ➖ Aceptado como está (anotar motivo
 | 15 | 2 - Fotos | Subida de fotos: validar tipo y tamaño en el servidor (no solo en el navegador), firmar las subidas a la nube, guardar las credenciales del proveedor solo en `.env` y definir cómo se moderan las fotos reportadas | ⏳ |
 | 16 | 1 - Base de datos | Borrar el usuario de prueba `t1.check.1793828121@example.com` creado al probar el perfil (T1) | ⏳ |
 | 17 | 4 - Falta Uno | Borrar los 4 usuarios de prueba `t3.{a,b,c,d}.1793828679@example.com` y la convocatoria de prueba creada al probar T3 | ⏳ |
+| 18 | 4 - Push | El servidor envía el push al `endpoint` que manda el cliente (solo se exige `https`): restringir a los hosts de los servicios push reales (FCM, Mozilla, Apple, Windows) para evitar que se use como proxy hacia URLs arbitrarias (SSRF) | ⏳ |
+| 19 | 4 - Push | Generar claves VAPID propias para producción (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`) y cargarlas como variables del hosting; no reutilizar las de desarrollo | ⏳ |
+| 20 | 4 - Push | El aviso a un barrio grande se envía con `Promise.all` sin límite de concurrencia: procesar en lotes o con una cola antes de que haya muchos usuarios por barrio | ⏳ |
+| 21 | 4 - Push | Borrar los usuarios de prueba `t4.{a,b,c}.1793830377@example.com`, `t4b.{a,b}.1793830698@example.com` y `t4c.{a,b}.1793831356@example.com` y sus convocatorias y notificaciones de la base de desarrollo | ⏳ |
 
 ---
 

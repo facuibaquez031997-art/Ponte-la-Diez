@@ -56,6 +56,7 @@ model User {
   reservas         Reserva[]
   convocatorias    Convocatoria[]
   subscriptions    PushSubscription[]
+  notificaciones   Notificacion[]
 }
 
 model Cancha {
@@ -103,24 +104,40 @@ model Pago {
 }
 
 model Convocatoria {
-  id                 String   @id @default(uuid())
+  id                 String         @id @default(uuid())
   creadorId          String
-  creador            User     @relation(fields: [creadorId], references: [id])
+  creador            User           @relation(fields: [creadorId], references: [id])
   canchaId           String?
-  cancha             Cancha?  @relation(fields: [canchaId], references: [id])
+  cancha             Cancha?        @relation(fields: [canchaId], references: [id])
   fechaHora          DateTime
   jugadoresFaltantes Int
   posicion           Posicion
   mensaje            String?
-  alcance            Alcance  @default(BARRIO)
-  estado             String   @default("ABIERTA")
+  alcance            Alcance        @default(BARRIO)
+  estado             String         @default("ABIERTA")
+  notificaciones     Notificacion[]
 }
 
 model PushSubscription {
-  id        String @id @default(uuid())
+  id        String   @id @default(uuid())
   userId    String
-  user      User   @relation(fields: [userId], references: [id])
-  endpoint  String
+  user      User     @relation(fields: [userId], references: [id])
+  endpoint  String   @unique
   keysP256  String
   keysAuth  String
+  createdAt DateTime @default(now())
+}
+
+model Notificacion {
+  id             String        @id @default(uuid())
+  userId         String
+  user           User          @relation(fields: [userId], references: [id])
+  convocatoriaId String?
+  convocatoria   Convocatoria? @relation(fields: [convocatoriaId], references: [id], onDelete: SetNull)
+  titulo         String
+  cuerpo         String
+  leida          Boolean       @default(false)
+  createdAt      DateTime      @default(now())
+
+  @@index([userId, leida])
 }

@@ -15,10 +15,14 @@ const makePrisma = () => ({
   },
 })
 
-const makeService = (prisma = makePrisma()) => ({
-  prisma,
-  service: new ConvocatoriasService(prisma as never),
-})
+const makeService = (prisma = makePrisma()) => {
+  const notifications = { notifyNewConvocatoria: vi.fn(async (_id: string) => undefined) }
+  return {
+    prisma,
+    notifications,
+    service: new ConvocatoriasService(prisma as never, notifications as never),
+  }
+}
 
 const baseDto = {
   fechaHora: future,
@@ -45,6 +49,31 @@ describe('ConvocatoriasService.create', () => {
         alcance: 'BARRIO',
       },
     })
+  })
+
+  it('notifies the neighborhood about the created call', async () => {
+    const { prisma, notifications, service } = makeService()
+    prisma.user.findUnique.mockResolvedValue({ id: 'u1', barrioPontevedra: 'Barrio El Sol' })
+
+    await service.create('u1', baseDto)
+
+    expect(notifications.notifyNewConvocatoria).toHaveBeenCalledWith('c1')
+  })
+
+  it('still creates the call when notifying fails', async () => {
+    const { prisma, notifications, service } = makeService()
+    prisma.user.findUnique.mockResolvedValue({ id: 'u1', barrioPontevedra: 'Barrio El Sol' })
+    notifications.notifyNewConvocatoria.mockRejectedValue(new Error('push down'))
+
+    await expect(service.create('u1', baseDto)).resolves.toMatchObject({ id: 'c1' })
+  })
+
+  it('does not notify when the creator has no neighborhood', async () => {
+    const { prisma, notifications, service } = makeService()
+    prisma.user.findUnique.mockResolvedValue({ id: 'u1', barrioPontevedra: null })
+
+    await expect(service.create('u1', baseDto)).rejects.toBeInstanceOf(BadRequestException)
+    expect(notifications.notifyNewConvocatoria).not.toHaveBeenCalled()
   })
 
   it('rejects a creator without a neighborhood in the profile', async () => {
