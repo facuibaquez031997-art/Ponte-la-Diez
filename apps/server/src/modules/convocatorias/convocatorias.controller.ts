@@ -2,7 +2,7 @@ import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post } fr
 import type { Convocatoria } from '@prisma/client'
 import type { AuthUser } from '../auth/auth.types.js'
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js'
-import { ConvocatoriasService } from './convocatorias.service.js'
+import { ConvocatoriasService, type ConvocatoriaWithCreator } from './convocatorias.service.js'
 import { CreateConvocatoriaDto } from './dto/create-convocatoria.dto.js'
 
 @Controller('convocatorias')
@@ -15,7 +15,7 @@ export class ConvocatoriasController {
   }
 
   @Get()
-  listForMyBarrio(@CurrentUser() user: AuthUser): Promise<Convocatoria[]> {
+  listForMyBarrio(@CurrentUser() user: AuthUser): Promise<ConvocatoriaWithCreator[]> {
     return this.convocatorias.listForMyBarrio(user.id)
   }
 

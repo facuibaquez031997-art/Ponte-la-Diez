@@ -10,6 +10,10 @@ import { PrismaService } from '../../common/prisma/prisma.service.js'
 import { NotificationsService } from '../notifications/notifications.service.js'
 import type { CreateConvocatoriaDto } from './dto/create-convocatoria.dto.js'
 
+export type ConvocatoriaWithCreator = Convocatoria & {
+  creador: { nombre: string; avatarUrl: string | null }
+}
+
 const ESTADO_ABIERTA = 'ABIERTA'
 const ESTADO_CERRADA = 'CERRADA'
 
@@ -54,7 +58,7 @@ export class ConvocatoriasService {
     return convocatoria
   }
 
-  async listForMyBarrio(userId: string): Promise<Convocatoria[]> {
+  async listForMyBarrio(userId: string): Promise<ConvocatoriaWithCreator[]> {
     const user = await this.prisma.user.findUnique({ where: { id: userId } })
     if (!user?.barrioPontevedra) return []
 
@@ -65,6 +69,7 @@ export class ConvocatoriasService {
         fechaHora: { gte: new Date() },
         creador: { barrioPontevedra: user.barrioPontevedra },
       },
+      include: { creador: { select: { nombre: true, avatarUrl: true } } },
       orderBy: { fechaHora: 'asc' },
     })
   }

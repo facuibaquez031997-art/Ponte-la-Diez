@@ -126,6 +126,18 @@ describe('ConvocatoriasService.listForMyBarrio', () => {
     expect(args.where.fechaHora.gte).toBeInstanceOf(Date)
   })
 
+  it('includes only the creator name and photo, never other user fields', async () => {
+    const { prisma, service } = makeService()
+    prisma.user.findUnique.mockResolvedValue({ id: 'u1', barrioPontevedra: 'Barrio El Sol' })
+
+    await service.listForMyBarrio('u1')
+
+    const args = prisma.convocatoria.findMany.mock.calls[0]?.[0] as unknown as {
+      include: { creador: { select: Record<string, boolean> } }
+    }
+    expect(args.include.creador.select).toEqual({ nombre: true, avatarUrl: true })
+  })
+
   it('returns an empty list when the player has no neighborhood', async () => {
     const { prisma, service } = makeService()
     prisma.user.findUnique.mockResolvedValue({ id: 'u1', barrioPontevedra: null })
