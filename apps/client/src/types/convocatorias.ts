@@ -27,6 +27,20 @@ export interface Convocatoria {
   estado: string
 }
 
+export type RespuestaEstado = 'ACEPTADA' | 'DECLINADA'
+
 export interface BarrioConvocatoria extends Convocatoria {
   creador: { nombre: string; avatarUrl: string | null }
+  respuestas: Array<{ estado: RespuestaEstado }>
+}
+
+export interface TeamPlayer {
+  userId: string
+  nombre: string
+  avatarUrl: string | null
+}
+
+export interface ConvocatoriaTeam {
+  jugadoresFaltantes: number
+  aceptados: TeamPlayer[]
 }

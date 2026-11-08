@@ -1,15 +1,20 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import ConfirmDialog from '../../components/common/ConfirmDialog'
+import TeamList from '../../components/common/TeamList'
 import { useAuth } from '../../hooks/useAuth'
 import { convocatoriasService } from '../../services/convocatorias.service'
 import {
   POSICION_LABELS,
   type BarrioConvocatoria,
   type Convocatoria,
+  type ConvocatoriaTeam,
+  type RespuestaEstado,
 } from '../../types/convocatorias'
 import { getAuthErrorMessage } from '../Auth/authError'
 
 const ESTADO_ABIERTA = 'ABIERTA'
+const REFRESH_INTERVAL_MS = 30_000
 
 const formatDate = (iso: string) =>
   new Date(iso).toLocaleString('es-AR', {
@@ -49,13 +54,25 @@ const CallDetails = ({ call }: CallDetailsProps) => (
   </div>
 )
 
+const fetchTeams = async (ids: string[]) => {
+  const results = await Promise.allSettled(ids.map((id) => convocatoriasService.team(id)))
+  const teams: Record<string, ConvocatoriaTeam> = {}
+  results.forEach((result, index) => {
+    const id = ids[index]
+    if (id && result.status === 'fulfilled') teams[id] = result.value
+  })
+  return teams
+}
+
 const ConvocatoriasPage = () => {
   const { user } = useAuth()
   const [barrioCalls, setBarrioCalls] = useState<BarrioConvocatoria[]>([])
   const [myCalls, setMyCalls] = useState<Convocatoria[]>([])
+  const [teams, setTeams] = useState<Record<string, ConvocatoriaTeam>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [closingId, setClosingId] = useState<string | null>(null)
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const [cancelingId, setCancelingId] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     try {
@@ -63,8 +80,14 @@ const ConvocatoriasPage = () => {
         convocatoriasService.listForMyBarrio(),
         convocatoriasService.listMine(),
       ])
+      const openMine = mine.filter((call) => call.estado === ESTADO_ABIERTA)
+      const acceptedIds = forBarrio
+        .filter((call) => call.respuestas[0]?.estado === 'ACEPTADA')
+        .map((call) => call.id)
+
       setBarrioCalls(forBarrio)
-      setMyCalls(mine.filter((call) => call.estado === ESTADO_ABIERTA))
+      setMyCalls(openMine)
+      setTeams(await fetchTeams([...openMine.map((call) => call.id), ...acceptedIds]))
       setError(null)
     } catch (err) {
       setError(getAuthErrorMessage(err))
@@ -75,19 +98,33 @@ const ConvocatoriasPage = () => {
 
   useEffect(() => {
     const first = window.setTimeout(load, 0)
-    return () => window.clearTimeout(first)
+    const timer = window.setInterval(load, REFRESH_INTERVAL_MS)
+    return () => {
+      window.clearTimeout(first)
+      window.clearInterval(timer)
+    }
   }, [load])
 
-  const handleClose = async (id: string) => {
-    setClosingId(id)
+  const runAction = async (id: string, action: () => Promise<unknown>) => {
+    setBusyId(id)
+    let failure: string | null = null
     try {
-      await convocatoriasService.close(id)
-      await load()
+      await action()
     } catch (err) {
-      setError(getAuthErrorMessage(err))
-    } finally {
-      setClosingId(null)
+      failure = getAuthErrorMessage(err)
     }
+    await load()
+    setError(failure)
+    setBusyId(null)
+  }
+
+  const handleRespond = (id: string, estado: RespuestaEstado) =>
+    runAction(id, () => convocatoriasService.respond(id, estado))
+
+  const handleConfirmCancel = async () => {
+    const id = cancelingId
+    setCancelingId(null)
+    if (id) await runAction(id, () => convocatoriasService.cancel(id))
   }
 
   const othersCalls = barrioCalls.filter((call) => call.creadorId !== user?.id)
@@ -126,35 +163,74 @@ const ConvocatoriasPage = () => {
           </p>
         ) : (
           <ul className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {othersCalls.map((call) => (
-              <li
-                key={call.id}
-                className="flex flex-col gap-4 rounded-2xl bg-surface-container-lowest p-5 shadow-sm"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-primary-container">
-                    {call.creador.avatarUrl ? (
-                      <img
-                        src={call.creador.avatarUrl}
-                        alt=""
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <span
-                        aria-hidden="true"
-                        className="material-symbols-outlined text-xl text-on-primary"
-                      >
-                        person
-                      </span>
-                    )}
+            {othersCalls.map((call) => {
+              const answer = call.respuestas[0]?.estado
+              const team = teams[call.id]
+              const busy = busyId === call.id
+
+              return (
+                <li
+                  key={call.id}
+                  className="flex flex-col gap-4 rounded-2xl bg-surface-container-lowest p-5 shadow-sm"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-primary-container">
+                      {call.creador.avatarUrl ? (
+                        <img
+                          src={call.creador.avatarUrl}
+                          alt=""
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <span
+                          aria-hidden="true"
+                          className="material-symbols-outlined text-xl text-on-primary"
+                        >
+                          person
+                        </span>
+                      )}
+                    </div>
+                    <span className="truncate text-sm font-semibold text-on-surface">
+                      {call.creador.nombre}
+                    </span>
                   </div>
-                  <span className="truncate text-sm font-semibold text-on-surface">
-                    {call.creador.nombre}
-                  </span>
-                </div>
-                <CallDetails call={call} />
-              </li>
-            ))}
+
+                  <CallDetails call={call} />
+
+                  {answer === undefined && (
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void handleRespond(call.id, 'ACEPTADA')}
+                        className="flex-1 rounded-full bg-primary-container px-4 py-2 text-sm font-semibold text-on-primary transition-colors hover:bg-secondary disabled:opacity-60"
+                      >
+                        Acepto
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void handleRespond(call.id, 'DECLINADA')}
+                        className="flex-1 rounded-full bg-surface-container px-4 py-2 text-sm font-semibold text-on-surface transition-colors hover:bg-surface-container-high disabled:opacity-60"
+                      >
+                        No puedo
+                      </button>
+                    </div>
+                  )}
+                  {answer === 'ACEPTADA' && (
+                    <>
+                      <p className="text-sm font-semibold text-secondary">
+                        Aceptaste: ya estás en la lista.
+                      </p>
+                      {team && <TeamList team={team} />}
+                    </>
+                  )}
+                  {answer === 'DECLINADA' && (
+                    <p className="text-sm text-on-surface-variant">Avisaste que no podés ir.</p>
+                  )}
+                </li>
+              )
+            })}
           </ul>
         )}
       </section>
@@ -177,25 +253,52 @@ const ConvocatoriasPage = () => {
           </p>
         ) : (
           <ul className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {myCalls.map((call) => (
-              <li
-                key={call.id}
-                className="flex flex-col gap-4 rounded-2xl bg-surface-container-lowest p-5 shadow-sm"
-              >
-                <CallDetails call={call} />
-                <button
-                  type="button"
-                  disabled={closingId === call.id}
-                  onClick={() => void handleClose(call.id)}
-                  className="self-start rounded-full bg-surface-container px-5 py-2 text-sm font-semibold text-on-surface transition-colors hover:bg-surface-container-high disabled:opacity-60"
+            {myCalls.map((call) => {
+              const team = teams[call.id]
+              const busy = busyId === call.id
+
+              return (
+                <li
+                  key={call.id}
+                  className="flex flex-col gap-4 rounded-2xl bg-surface-container-lowest p-5 shadow-sm"
                 >
-                  {closingId === call.id ? 'Cerrando...' : 'Ya completé el equipo'}
-                </button>
-              </li>
-            ))}
+                  <CallDetails call={call} />
+                  {team && <TeamList team={team} />}
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() =>
+                        void runAction(call.id, () => convocatoriasService.close(call.id))
+                      }
+                      className="rounded-full bg-surface-container px-5 py-2 text-sm font-semibold text-on-surface transition-colors hover:bg-surface-container-high disabled:opacity-60"
+                    >
+                      Ya completé el equipo
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => setCancelingId(call.id)}
+                      className="rounded-full bg-error-container px-5 py-2 text-sm font-semibold text-on-error-container transition-opacity hover:opacity-90 disabled:opacity-60"
+                    >
+                      Cancelar partido
+                    </button>
+                  </div>
+                </li>
+              )
+            })}
           </ul>
         )}
       </section>
+
+      <ConfirmDialog
+        open={cancelingId !== null}
+        title="Cancelar partido"
+        message="Les vamos a avisar a los jugadores que aceptaron que el partido se canceló. ¿Seguro?"
+        confirmLabel="Sí, cancelar partido"
+        onConfirm={handleConfirmCancel}
+        onCancel={() => setCancelingId(null)}
+      />
     </main>
   )
 }
