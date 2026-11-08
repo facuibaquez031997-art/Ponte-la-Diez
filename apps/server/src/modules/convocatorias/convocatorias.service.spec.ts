@@ -16,7 +16,10 @@ const makePrisma = () => ({
 })
 
 const makeService = (prisma = makePrisma()) => {
-  const notifications = { notifyNewConvocatoria: vi.fn(async (_id: string) => undefined) }
+  const notifications = {
+    notifyNewConvocatoria: vi.fn(async (_id: string) => undefined),
+    clearForConvocatoria: vi.fn(async (_id: string) => undefined),
+  }
   return {
     prisma,
     notifications,
@@ -160,12 +163,30 @@ describe('ConvocatoriasService.close', () => {
     })
   })
 
+  it('removes the inbox notifications of the closed call', async () => {
+    const { prisma, notifications, service } = makeService()
+    prisma.convocatoria.findUnique.mockResolvedValue({ id: 'c1', creadorId: 'u1' })
+
+    await service.close('u1', 'c1')
+
+    expect(notifications.clearForConvocatoria).toHaveBeenCalledWith('c1')
+  })
+
+  it('still closes the call when removing the notifications fails', async () => {
+    const { prisma, notifications, service } = makeService()
+    prisma.convocatoria.findUnique.mockResolvedValue({ id: 'c1', creadorId: 'u1' })
+    notifications.clearForConvocatoria.mockRejectedValue(new Error('db down'))
+
+    await expect(service.close('u1', 'c1')).resolves.toMatchObject({ estado: 'CERRADA' })
+  })
+
   it('forbids closing a call owned by someone else', async () => {
-    const { prisma, service } = makeService()
+    const { prisma, notifications, service } = makeService()
     prisma.convocatoria.findUnique.mockResolvedValue({ id: 'c1', creadorId: 'other' })
 
     await expect(service.close('u1', 'c1')).rejects.toBeInstanceOf(ForbiddenException)
     expect(prisma.convocatoria.update).not.toHaveBeenCalled()
+    expect(notifications.clearForConvocatoria).not.toHaveBeenCalled()
   })
 
   it('returns not found for an unknown call', async () => {

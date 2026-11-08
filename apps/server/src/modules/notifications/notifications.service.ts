@@ -98,6 +98,10 @@ export class NotificationsService {
     await this.prisma.notificacion.update({ where: { id }, data: { leida: true } })
   }
 
+  async clearForConvocatoria(convocatoriaId: string): Promise<void> {
+    await this.prisma.notificacion.deleteMany({ where: { convocatoriaId } })
+  }
+
   async markAllRead(userId: string): Promise<void> {
     await this.prisma.notificacion.updateMany({
       where: { userId, leida: false },

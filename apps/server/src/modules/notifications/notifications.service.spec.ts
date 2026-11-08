@@ -29,6 +29,7 @@ const makeDeps = () => {
     },
     notificacion: {
       createMany: vi.fn(async (_args?: object) => ({ count: 2 })),
+      deleteMany: vi.fn(async (_args?: object) => ({ count: 2 })),
       findMany: vi.fn(async (_args?: object) => []),
       count: vi.fn(async (_args?: object) => 3),
       findUnique: vi.fn(async (_args?: object) => null as unknown),
@@ -43,6 +44,18 @@ const makeDeps = () => {
   const push = { send: vi.fn(async (): Promise<'sent' | 'gone' | 'failed'> => 'sent') }
   return { prisma, push, service: new NotificationsService(prisma as never, push as never) }
 }
+
+describe('NotificationsService.clearForConvocatoria', () => {
+  it('deletes the inbox entries of every user for that call', async () => {
+    const { prisma, service } = makeDeps()
+
+    await service.clearForConvocatoria('c1')
+
+    expect(prisma.notificacion.deleteMany).toHaveBeenCalledWith({
+      where: { convocatoriaId: 'c1' },
+    })
+  })
+})
 
 describe('NotificationsService.notifyNewConvocatoria', () => {
   it('looks for players of the creator barrio, excluding the creator', async () => {

@@ -88,9 +88,15 @@ export class ConvocatoriasService {
       throw new ForbiddenException('Solo quien creó la convocatoria puede cerrarla')
     }
 
-    return this.prisma.convocatoria.update({
+    const closed = await this.prisma.convocatoria.update({
       where: { id },
       data: { estado: ESTADO_CERRADA },
     })
+
+    // The call is already closed: a failed cleanup must not turn that into an error.
+    await this.notifications.clearForConvocatoria(id).catch((error: unknown) => {
+      this.logger.error(`Could not clear notifications of convocatoria ${id}`, error)
+    })
+    return closed
   }
 }
