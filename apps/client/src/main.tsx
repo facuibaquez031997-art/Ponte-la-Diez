@@ -5,6 +5,7 @@ import App from './App'
 import ProtectedRoute from './components/common/ProtectedRoute'
 import { AuthProvider } from './context/AuthProvider'
 import LoginPage from './pages/Auth/LoginPage'
+import ConvocatoriasPage from './pages/Convocatorias/ConvocatoriasPage'
 import ExplorarCanchasPage from './pages/Canchas/ExplorarCanchasPage'
 import RegisterPage from './pages/Auth/RegisterPage'
 import HomePage from './pages/Home/HomePage'
@@ -20,7 +21,10 @@ const router = createBrowserRouter([
       { path: 'canchas', element: <ExplorarCanchasPage /> },
       {
         element: <ProtectedRoute />,
-        children: [{ path: 'perfil', element: <ProfilePage /> }],
+        children: [
+          { path: 'perfil', element: <ProfilePage /> },
+          { path: 'convocatorias', element: <ConvocatoriasPage /> },
+        ],
       },
       { path: 'login', element: <LoginPage /> },
       { path: 'registro', element: <RegisterPage /> },

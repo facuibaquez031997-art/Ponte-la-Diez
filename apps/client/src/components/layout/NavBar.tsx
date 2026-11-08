@@ -8,7 +8,7 @@ import NotificationBell from './NotificationBell'
 
 const NAV_LINKS = [
   { label: 'Explorar canchas', to: '/canchas' },
-  { label: 'Falta uno', to: '#' },
+  { label: 'Falta uno', to: '/convocatorias' },
   { label: 'Mis reservas', to: '#' },
   { label: 'Mensajes', to: '#' },
 ]

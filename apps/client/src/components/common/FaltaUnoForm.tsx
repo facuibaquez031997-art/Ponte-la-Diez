@@ -1,15 +1,10 @@
 import { useState, type FormEvent } from 'react'
 import { convocatoriasService } from '../../services/convocatorias.service'
-import type { Posicion } from '../../types/convocatorias'
+import { POSICION_LABELS, type Posicion } from '../../types/convocatorias'
 import { getAuthErrorMessage } from '../../pages/Auth/authError'
 import FormField from './FormField'
 
-const POSICIONES: Array<{ value: Posicion; label: string }> = [
-  { value: 'ARQUERO', label: 'Arquero' },
-  { value: 'DEFENSOR', label: 'Defensor' },
-  { value: 'MEDIOCAMPISTA', label: 'Mediocampista' },
-  { value: 'DELANTERO', label: 'Delantero' },
-]
+const POSICIONES = Object.entries(POSICION_LABELS) as Array<[Posicion, string]>
 
 const MESSAGE_MAX_LENGTH = 500
 
@@ -110,9 +105,9 @@ const FaltaUnoForm = ({ barrio }: FaltaUnoFormProps) => {
             onChange={(e) => setPosicion(e.target.value as Posicion)}
             className={FIELD_CLASS}
           >
-            {POSICIONES.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
+            {POSICIONES.map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
               </option>
             ))}
           </select>
