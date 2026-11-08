@@ -189,6 +189,18 @@ describe('NotificationsService.notifyNewConvocatoria', () => {
     expect(args.data[0]?.cuerpo).toContain('Traé botines')
   })
 
+  it('asks for "un jugador" when any position is welcome', async () => {
+    const { prisma, service } = makeDeps()
+    prisma.convocatoria.findUnique.mockResolvedValue({ ...convocatoria, posicion: 'TODOS' })
+
+    await service.notifyNewConvocatoria('c1')
+
+    const args = prisma.notificacion.createMany.mock.calls[0]?.[0] as unknown as {
+      data: Array<{ titulo: string }>
+    }
+    expect(args.data[0]?.titulo).toBe('Falta un jugador')
+  })
+
   it('names the linked court in the body', async () => {
     const { prisma, service } = makeDeps()
 

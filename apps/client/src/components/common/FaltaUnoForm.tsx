@@ -120,7 +120,7 @@ const FaltaUnoForm = ({ barrio }: FaltaUnoFormProps) => {
           type="number"
           required
           min={1}
-          max={10}
+          max={11}
           value={jugadoresFaltantes}
           onChange={(e) => setJugadoresFaltantes(Number(e.target.value))}
         />

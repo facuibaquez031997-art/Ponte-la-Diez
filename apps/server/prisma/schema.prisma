@@ -17,6 +17,7 @@ enum Posicion {
   DEFENSOR
   MEDIOCAMPISTA
   DELANTERO
+  TODOS
 }
 
 enum Alcance {

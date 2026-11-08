@@ -12,6 +12,7 @@ const POSICION_LABEL: Record<Posicion, string> = {
   DEFENSOR: 'defensor',
   MEDIOCAMPISTA: 'mediocampista',
   DELANTERO: 'delantero',
+  TODOS: 'jugador',
 }
 
 @Injectable()

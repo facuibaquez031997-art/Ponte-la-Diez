@@ -31,7 +31,7 @@ export class CreateConvocatoriaDto {
 
   @IsInt()
   @Min(1)
-  @Max(10)
+  @Max(11)
   jugadoresFaltantes!: number
 
   @IsOptional()

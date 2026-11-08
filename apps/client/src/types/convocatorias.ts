@@ -1,10 +1,11 @@
-export type Posicion = 'ARQUERO' | 'DEFENSOR' | 'MEDIOCAMPISTA' | 'DELANTERO'
+export type Posicion = 'ARQUERO' | 'DEFENSOR' | 'MEDIOCAMPISTA' | 'DELANTERO' | 'TODOS'
 
 export const POSICION_LABELS: Record<Posicion, string> = {
   ARQUERO: 'Arquero',
   DEFENSOR: 'Defensor',
   MEDIOCAMPISTA: 'Mediocampista',
   DELANTERO: 'Delantero',
+  TODOS: 'Todos',
 }
 
 export interface CreateConvocatoriaPayload {
