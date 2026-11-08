@@ -8,11 +8,17 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common'
 import type { AuthUser } from '../auth/auth.types.js'
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js'
-import { ContactosService, type ContactsOverview } from './contactos.service.js'
+import {
+  ContactosService,
+  type ContactSearchResult,
+  type ContactsOverview,
+} from './contactos.service.js'
 import { RequestContactDto } from './dto/request-contact.dto.js'
+import { SearchContactsDto } from './dto/search-contacts.dto.js'
 
 @Controller('contactos')
 export class ContactosController {
@@ -23,13 +29,22 @@ export class ContactosController {
     return this.contactos.list(user.id)
   }
 
+  @Get('buscar')
+  search(
+    @CurrentUser() user: AuthUser,
+    @Query() query: SearchContactsDto
+  ): Promise<ContactSearchResult[]> {
+    return this.contactos.search(user.id, query.q)
+  }
+
   @Post('solicitudes')
   @HttpCode(202)
   async request(
     @CurrentUser() user: AuthUser,
     @Body() dto: RequestContactDto
   ): Promise<{ message: string }> {
-    await this.contactos.request(user.id, dto.email)
+    if (dto.usuarioId) await this.contactos.requestUser(user.id, dto.usuarioId)
+    else if (dto.email) await this.contactos.request(user.id, dto.email)
     return { message: 'Si ese email corresponde a un jugador, le enviamos tu solicitud.' }
   }
 

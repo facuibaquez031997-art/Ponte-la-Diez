@@ -7,7 +7,10 @@ type Row = { id: string; estado: string; solicitanteId: string; destinatarioId: 
 
 const makeService = () => {
   const prisma = {
-    user: { findUnique: vi.fn(async (_args?: object) => ({ id: 'u2' }) as unknown) },
+    user: {
+      findUnique: vi.fn(async (_args?: object) => ({ id: 'u2' }) as unknown),
+      findMany: vi.fn(async (_args?: object) => [] as unknown[]),
+    },
     contacto: {
       findUnique: vi.fn(async (_args?: object) => null as unknown),
       findMany: vi.fn(async (_args?: object) => [] as unknown[]),
@@ -121,6 +124,104 @@ describe('ContactosService.request', () => {
     notifications.notifyContactRequest.mockRejectedValue(new Error('push down'))
 
     await expect(service.request('u1', 'ana@example.com')).resolves.toBeUndefined()
+  })
+})
+
+describe('ContactosService.requestUser', () => {
+  it('creates a pending request for the chosen player and notifies them', async () => {
+    const { prisma, notifications, service } = makeService()
+
+    await service.requestUser('u1', 'u2')
+
+    expect(prisma.user.findUnique).toHaveBeenCalledWith({ where: { id: 'u2' } })
+    expect(prisma.contacto.create).toHaveBeenCalledWith({
+      data: { solicitanteId: 'u1', destinatarioId: 'u2' },
+    })
+    expect(notifications.notifyContactRequest).toHaveBeenCalledWith('k1')
+  })
+
+  it('answers the same way for an unknown player, without creating anything', async () => {
+    const { prisma, service } = makeService()
+    prisma.user.findUnique.mockResolvedValue(null)
+
+    await expect(service.requestUser('u1', 'ghost')).resolves.toBeUndefined()
+    expect(prisma.contacto.create).not.toHaveBeenCalled()
+  })
+
+  it('ignores a request to oneself', async () => {
+    const { prisma, service } = makeService()
+    prisma.user.findUnique.mockResolvedValue({ id: 'u1' })
+
+    await expect(service.requestUser('u1', 'u1')).resolves.toBeUndefined()
+    expect(prisma.contacto.create).not.toHaveBeenCalled()
+  })
+})
+
+describe('ContactosService.search', () => {
+  const found = {
+    id: 'u9',
+    nombre: 'Ana Pérez',
+    avatarUrl: null,
+    barrioPontevedra: 'Barrio El Sol',
+  }
+
+  it.each(['', '  ', 'an', ' a '])('does not query for %j (under 3 letters)', async (term) => {
+    const { prisma, service } = makeService()
+
+    await expect(service.search('u1', term)).resolves.toEqual([])
+    expect(prisma.user.findMany).not.toHaveBeenCalled()
+  })
+
+  it('looks players up by name, hiding oneself and anyone already related', async () => {
+    const { prisma, service } = makeService()
+    prisma.contacto.findMany.mockResolvedValue([
+      { solicitanteId: 'u1', destinatarioId: 'u2' },
+      { solicitanteId: 'u3', destinatarioId: 'u1' },
+    ])
+    prisma.user.findMany.mockResolvedValue([found])
+
+    await expect(service.search('u1', '  ana ')).resolves.toEqual([found])
+    expect(prisma.user.findMany).toHaveBeenCalledWith({
+      where: {
+        rol: 'PLAYER',
+        nombre: { contains: 'ana', mode: 'insensitive' },
+        id: { notIn: ['u1', 'u2', 'u3'] },
+      },
+      select: { id: true, nombre: true, avatarUrl: true, barrioPontevedra: true },
+      orderBy: { nombre: 'asc' },
+      take: 10,
+    })
+  })
+
+  it.each([
+    ['%%%', '\\%\\%\\%'],
+    ['a_b', 'a\\_b'],
+    ['a\\b', 'a\\\\b'],
+  ])('searches %j as plain text, never as a LIKE pattern', async (term, escaped) => {
+    const { prisma, service } = makeService()
+
+    await service.search('u1', term)
+
+    const args = prisma.user.findMany.mock.calls[0]?.[0] as unknown as {
+      where: { nombre: { contains: string } }
+    }
+    expect(args.where.nombre.contains).toBe(escaped)
+  })
+
+  it('exposes only the id, name, photo and barrio of the players found', async () => {
+    const { prisma, service } = makeService()
+
+    await service.search('u1', 'ana')
+
+    const args = prisma.user.findMany.mock.calls[0]?.[0] as unknown as {
+      select: Record<string, boolean>
+    }
+    expect(Object.keys(args.select).sort()).toEqual([
+      'avatarUrl',
+      'barrioPontevedra',
+      'id',
+      'nombre',
+    ])
   })
 })
 

@@ -27,4 +27,24 @@ describe('RequestContactDto', () => {
 
     expect(errors.map((error) => error.property)).toEqual(['email'])
   })
+
+  it('accepts a player id instead of an email', async () => {
+    const dto = plainToInstance(RequestContactDto, {
+      usuarioId: '3f2b8c1e-9d4a-4b6e-8f1a-2c7d5e9a0b13',
+    })
+
+    await expect(validate(dto)).resolves.toEqual([])
+  })
+
+  it('rejects a body with neither an email nor a player id', async () => {
+    const errors = await validate(plainToInstance(RequestContactDto, {}))
+
+    expect(errors.length).toBeGreaterThan(0)
+  })
+
+  it('rejects a player id that is not a UUID', async () => {
+    const errors = await validate(plainToInstance(RequestContactDto, { usuarioId: 'ana' }))
+
+    expect(errors.map((error) => error.property)).toEqual(['usuarioId'])
+  })
 })

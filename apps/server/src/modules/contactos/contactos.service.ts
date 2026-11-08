@@ -19,6 +19,16 @@ export interface ContactsOverview {
   enviadas: ContactEntry[]
 }
 
+export interface ContactSearchResult extends ContactUser {
+  barrioPontevedra: string | null
+}
+
+const SEARCH_MIN_LENGTH = 3
+const SEARCH_MAX_RESULTS = 10
+// Prisma hands `contains` to LIKE as is, so `%` and `_` would act as wildcards and skip the
+// minimum length ("%%%" matches everybody).
+const escapeLikePattern = (text: string): string => text.replace(/[\\%_]/g, '\\$&')
+
 const PUBLIC_USER = { id: true, nombre: true, avatarUrl: true } as const
 const ESTADO_PENDIENTE = 'PENDIENTE'
 const ESTADO_ACEPTADO = 'ACEPTADO'
@@ -44,6 +54,46 @@ export class ContactosService {
     const target = await this.prisma.user.findUnique({
       where: { email: email.trim().toLowerCase() },
     })
+    await this.sendRequest(userId, target)
+  }
+
+  /** Same neutral outcome as `request`, for a player picked from the name search. */
+  async requestUser(userId: string, targetId: string): Promise<void> {
+    const target = await this.prisma.user.findUnique({ where: { id: targetId } })
+    await this.sendRequest(userId, target)
+  }
+
+  /**
+   * Players whose name contains the term. Anyone already related (any request, either side) is
+   * left out, since they show up in the lists below the search.
+   */
+  async search(userId: string, term: string): Promise<ContactSearchResult[]> {
+    const name = term.trim()
+    if (name.length < SEARCH_MIN_LENGTH) return []
+
+    const related = await this.prisma.contacto.findMany({
+      where: { OR: [{ solicitanteId: userId }, { destinatarioId: userId }] },
+      select: { solicitanteId: true, destinatarioId: true },
+    })
+    const hidden = new Set([userId])
+    for (const row of related) {
+      hidden.add(row.solicitanteId)
+      hidden.add(row.destinatarioId)
+    }
+
+    return this.prisma.user.findMany({
+      where: {
+        rol: 'PLAYER',
+        nombre: { contains: escapeLikePattern(name), mode: 'insensitive' },
+        id: { notIn: [...hidden] },
+      },
+      select: { id: true, nombre: true, avatarUrl: true, barrioPontevedra: true },
+      orderBy: { nombre: 'asc' },
+      take: SEARCH_MAX_RESULTS,
+    })
+  }
+
+  private async sendRequest(userId: string, target: { id: string } | null): Promise<void> {
     if (!target || target.id === userId) return
 
     const [sent, received] = await Promise.all([
