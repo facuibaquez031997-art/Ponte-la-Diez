@@ -2,6 +2,7 @@ import { useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import BarrioCombobox from '../../components/common/BarrioCombobox'
 import ConfirmDialog from '../../components/common/ConfirmDialog'
+import FaltaUnoForm from '../../components/common/FaltaUnoForm'
 import FormField from '../../components/common/FormField'
 import { useAuth } from '../../hooks/useAuth'
 import { AVATAR_ACCEPT, AvatarUploadError } from '../../services/avatar.service'
@@ -325,6 +326,8 @@ const ProfilePage = () => {
           </div>
         </form>
       </div>
+
+      {user.rol === 'PLAYER' && <FaltaUnoForm barrio={user.barrioPontevedra ?? null} />}
 
       <ConfirmDialog
         open={confirming}
