@@ -20,8 +20,8 @@ export class ConvocatoriasController {
   }
 
   @Get()
-  listForMyBarrio(@CurrentUser() user: AuthUser): Promise<ConvocatoriaWithCreator[]> {
-    return this.convocatorias.listForMyBarrio(user.id)
+  listForMe(@CurrentUser() user: AuthUser): Promise<ConvocatoriaWithCreator[]> {
+    return this.convocatorias.listForMe(user.id)
   }
 
   @Get('mine')

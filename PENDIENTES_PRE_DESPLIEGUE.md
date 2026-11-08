@@ -29,6 +29,8 @@ Estados: ⏳ Pendiente · ✅ Resuelto · ➖ Aceptado como está (anotar motivo
 | 21 | 4 - Push | Borrar los usuarios de prueba `t4.{a,b,c}.1793830377@example.com`, `t4b.{a,b}.1793830698@example.com` y `t4c.{a,b}.1793831356@example.com` y sus convocatorias y notificaciones de la base de desarrollo | ⏳ |
 | 22 | 2 - Canchas | En el formulario "Falta uno" la cancha es texto libre (`Convocatoria.canchaNombre`): cuando exista el CRUD de canchas, reemplazarla por un selector que guarde `canchaId` y migrar o descartar `canchaNombre` | ⏳ |
 | 23 | 4 - Falta Uno | Borrar los usuarios de prueba `t6.{c,a,b,d,f,e}.1794099785371@example.com` y su convocatoria, respuestas y notificaciones de la base de desarrollo | ⏳ |
+| 24 | 4 - Contactos | Borrar los usuarios de prueba `t8.{u1,u2,u3,u4}.1794102346117@example.com` y `t8.{u1,u2,u3,u4}.1794102293426@example.com`, sus contactos, avisos, respuestas y notificaciones de la base de desarrollo | ⏳ |
+| 25 | 4 - Contactos | Límite de frecuencia para enviar solicitudes de contacto (evitar que alguien las dispare en masa a emails que adivina o recolecta) y opción de bloquear a un jugador; hoy una solicitud rechazada se puede volver a enviar sin límite | ⏳ |
 
 ---
 

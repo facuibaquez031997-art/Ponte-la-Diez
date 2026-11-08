@@ -23,6 +23,7 @@ const makePrisma = () => {
       findUnique: vi.fn(),
       update: vi.fn(async ({ data }: { data: object }) => ({ id: 'c1', ...data })),
     },
+    contacto: { findMany: vi.fn(async (_args?: object) => [] as unknown[]) },
     respuestaConvocatoria: {
       findUnique: vi.fn(async (_args?: object) => null as unknown),
       findMany: vi.fn(async (_args?: object) => [] as unknown[]),
@@ -128,34 +129,92 @@ describe('ConvocatoriasService.create', () => {
       service.create('u1', { ...baseDto, fechaHora: new Date(Date.now() - 1000) })
     ).rejects.toBeInstanceOf(BadRequestException)
   })
+
+  it('stores the CONTACTOS scope even when the creator has no neighborhood', async () => {
+    const { prisma, service } = makeService()
+    prisma.user.findUnique.mockResolvedValue({ id: 'u1', barrioPontevedra: null })
+    prisma.contacto.findMany.mockResolvedValue([{ solicitanteId: 'u1', destinatarioId: 'u2' }])
+
+    await service.create('u1', { ...baseDto, alcance: 'CONTACTOS' })
+
+    expect(prisma.convocatoria.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ alcance: 'CONTACTOS' }),
+    })
+  })
+
+  it('refuses the CONTACTOS scope without any accepted contact', async () => {
+    const { prisma, notifications, service } = makeService()
+    prisma.user.findUnique.mockResolvedValue({ id: 'u1', barrioPontevedra: 'Barrio El Sol' })
+
+    await expect(service.create('u1', { ...baseDto, alcance: 'CONTACTOS' })).rejects.toBeInstanceOf(
+      BadRequestException
+    )
+    expect(prisma.convocatoria.create).not.toHaveBeenCalled()
+    expect(notifications.notifyNewConvocatoria).not.toHaveBeenCalled()
+  })
+
+  it('still asks for a neighborhood when the scope is BARRIO', async () => {
+    const { prisma, service } = makeService()
+    prisma.user.findUnique.mockResolvedValue({ id: 'u1', barrioPontevedra: null })
+    prisma.contacto.findMany.mockResolvedValue([{ solicitanteId: 'u1', destinatarioId: 'u2' }])
+
+    await expect(service.create('u1', { ...baseDto, alcance: 'BARRIO' })).rejects.toBeInstanceOf(
+      BadRequestException
+    )
+  })
 })
 
-describe('ConvocatoriasService.listForMyBarrio', () => {
+describe('ConvocatoriasService.listForMe', () => {
   it('returns open, upcoming calls from creators of the same neighborhood', async () => {
     const { prisma, service } = makeService()
     prisma.user.findUnique.mockResolvedValue({ id: 'u1', barrioPontevedra: 'Barrio El Sol' })
 
-    await service.listForMyBarrio('u1')
+    await service.listForMe('u1')
 
     const args = prisma.convocatoria.findMany.mock.calls[0]?.[0] as unknown as {
-      where: {
-        estado: string
-        alcance: string
-        creador: { barrioPontevedra: string }
-        fechaHora: { gte: Date }
-      }
+      where: { estado: string; OR: object[]; fechaHora: { gte: Date } }
     }
     expect(args.where.estado).toBe('ABIERTA')
-    expect(args.where.alcance).toBe('BARRIO')
-    expect(args.where.creador.barrioPontevedra).toBe('Barrio El Sol')
+    expect(args.where.OR).toEqual([
+      { alcance: 'BARRIO', creador: { barrioPontevedra: 'Barrio El Sol' } },
+    ])
     expect(args.where.fechaHora.gte).toBeInstanceOf(Date)
+  })
+
+  it('also returns the calls of the contacts addressed to CONTACTOS', async () => {
+    const { prisma, service } = makeService()
+    prisma.user.findUnique.mockResolvedValue({ id: 'u1', barrioPontevedra: 'Barrio El Sol' })
+    prisma.contacto.findMany.mockResolvedValue([{ solicitanteId: 'u1', destinatarioId: 'u2' }])
+
+    await service.listForMe('u1')
+
+    const args = prisma.convocatoria.findMany.mock.calls[0]?.[0] as unknown as {
+      where: { OR: object[] }
+    }
+    expect(args.where.OR).toEqual([
+      { alcance: 'BARRIO', creador: { barrioPontevedra: 'Barrio El Sol' } },
+      { alcance: 'CONTACTOS', creadorId: { in: ['u2'] } },
+    ])
+  })
+
+  it('returns only the contacts calls when the player has no neighborhood', async () => {
+    const { prisma, service } = makeService()
+    prisma.user.findUnique.mockResolvedValue({ id: 'u1', barrioPontevedra: null })
+    prisma.contacto.findMany.mockResolvedValue([{ solicitanteId: 'u2', destinatarioId: 'u1' }])
+
+    await service.listForMe('u1')
+
+    const args = prisma.convocatoria.findMany.mock.calls[0]?.[0] as unknown as {
+      where: { OR: object[] }
+    }
+    expect(args.where.OR).toEqual([{ alcance: 'CONTACTOS', creadorId: { in: ['u2'] } }])
   })
 
   it('includes only the answer of the requesting player', async () => {
     const { prisma, service } = makeService()
     prisma.user.findUnique.mockResolvedValue({ id: 'u1', barrioPontevedra: 'Barrio El Sol' })
 
-    await service.listForMyBarrio('u1')
+    await service.listForMe('u1')
 
     const args = prisma.convocatoria.findMany.mock.calls[0]?.[0] as unknown as {
       include: { respuestas: { where: { userId: string }; select: { estado: boolean } } }
@@ -168,7 +227,7 @@ describe('ConvocatoriasService.listForMyBarrio', () => {
     const { prisma, service } = makeService()
     prisma.user.findUnique.mockResolvedValue({ id: 'u1', barrioPontevedra: 'Barrio El Sol' })
 
-    await service.listForMyBarrio('u1')
+    await service.listForMe('u1')
 
     const args = prisma.convocatoria.findMany.mock.calls[0]?.[0] as unknown as {
       include: { creador: { select: Record<string, boolean> } }
@@ -176,11 +235,11 @@ describe('ConvocatoriasService.listForMyBarrio', () => {
     expect(args.include.creador.select).toEqual({ nombre: true, avatarUrl: true })
   })
 
-  it('returns an empty list when the player has no neighborhood', async () => {
+  it('returns an empty list when the player has no neighborhood and no contacts', async () => {
     const { prisma, service } = makeService()
     prisma.user.findUnique.mockResolvedValue({ id: 'u1', barrioPontevedra: null })
 
-    await expect(service.listForMyBarrio('u1')).resolves.toEqual([])
+    await expect(service.listForMe('u1')).resolves.toEqual([])
     expect(prisma.convocatoria.findMany).not.toHaveBeenCalled()
   })
 })
@@ -236,6 +295,7 @@ const openCall = {
   id: 'c1',
   creadorId: 'u1',
   estado: 'ABIERTA',
+  alcance: 'BARRIO',
   fechaHora: future,
   jugadoresFaltantes: 2,
   creador: { barrioPontevedra: 'Barrio El Sol' },
@@ -297,6 +357,23 @@ describe('ConvocatoriasService.respond', () => {
   it('forbids a player from another neighborhood', async () => {
     const { prisma, service } = setupRespond()
     prisma.user.findUnique.mockResolvedValue({ id: 'u2', barrioPontevedra: 'Barrio El Alto' })
+
+    await expect(service.respond('u2', 'c1', 'ACEPTADA')).rejects.toBeInstanceOf(ForbiddenException)
+    expect(prisma.respuestaConvocatoria.create).not.toHaveBeenCalled()
+  })
+
+  it('lets a contact answer a CONTACTOS call from another neighborhood', async () => {
+    const { prisma, service } = setupRespond({ alcance: 'CONTACTOS' })
+    prisma.user.findUnique.mockResolvedValue({ id: 'u2', barrioPontevedra: 'Barrio El Alto' })
+    prisma.contacto.findMany.mockResolvedValue([{ solicitanteId: 'u1', destinatarioId: 'u2' }])
+
+    await service.respond('u2', 'c1', 'ACEPTADA')
+
+    expect(prisma.respuestaConvocatoria.create).toHaveBeenCalled()
+  })
+
+  it('forbids a neighbor who is not a contact from answering a CONTACTOS call', async () => {
+    const { prisma, service } = setupRespond({ alcance: 'CONTACTOS' })
 
     await expect(service.respond('u2', 'c1', 'ACEPTADA')).rejects.toBeInstanceOf(ForbiddenException)
     expect(prisma.respuestaConvocatoria.create).not.toHaveBeenCalled()

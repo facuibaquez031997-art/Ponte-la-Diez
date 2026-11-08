@@ -13,6 +13,7 @@ import {
   type RespuestaEstado,
 } from '@prisma/client'
 import { PrismaService } from '../../common/prisma/prisma.service.js'
+import { acceptedContactIds } from '../contactos/contact-ids.js'
 import { NotificationsService } from '../notifications/notifications.service.js'
 import type { CreateConvocatoriaDto } from './dto/create-convocatoria.dto.js'
 
@@ -52,10 +53,15 @@ export class ConvocatoriasService {
   async create(userId: string, dto: CreateConvocatoriaDto): Promise<Convocatoria> {
     const user = await this.prisma.user.findUnique({ where: { id: userId } })
     if (!user) throw new NotFoundException('Usuario no encontrado')
-    if (!user.barrioPontevedra) {
+
+    const alcance = dto.alcance ?? 'BARRIO'
+    if (alcance === 'BARRIO' && !user.barrioPontevedra) {
       throw new BadRequestException(
         'Completá tu barrio en el perfil para avisar que falta un jugador'
       )
+    }
+    if (alcance === 'CONTACTOS' && (await acceptedContactIds(this.prisma, userId)).length === 0) {
+      throw new BadRequestException('Todavía no tenés contactos a quienes avisar')
     }
     if (dto.fechaHora.getTime() <= Date.now()) {
       throw new BadRequestException('La fecha del partido debe ser futura')
@@ -70,7 +76,7 @@ export class ConvocatoriasService {
         posicion: dto.posicion,
         jugadoresFaltantes: dto.jugadoresFaltantes,
         mensaje: dto.mensaje,
-        alcance: 'BARRIO',
+        alcance,
       },
     })
 
@@ -81,16 +87,27 @@ export class ConvocatoriasService {
     return convocatoria
   }
 
-  async listForMyBarrio(userId: string): Promise<ConvocatoriaWithCreator[]> {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } })
-    if (!user?.barrioPontevedra) return []
+  /** Open calls the player is an audience of: their barrio's and their contacts'. */
+  async listForMe(userId: string): Promise<ConvocatoriaWithCreator[]> {
+    const [user, contactIds] = await Promise.all([
+      this.prisma.user.findUnique({ where: { id: userId } }),
+      acceptedContactIds(this.prisma, userId),
+    ])
+
+    const audiences: Prisma.ConvocatoriaWhereInput[] = []
+    if (user?.barrioPontevedra) {
+      audiences.push({ alcance: 'BARRIO', creador: { barrioPontevedra: user.barrioPontevedra } })
+    }
+    if (contactIds.length > 0) {
+      audiences.push({ alcance: 'CONTACTOS', creadorId: { in: contactIds } })
+    }
+    if (audiences.length === 0) return []
 
     return this.prisma.convocatoria.findMany({
       where: {
         estado: ESTADO_ABIERTA,
-        alcance: 'BARRIO',
         fechaHora: { gte: new Date() },
-        creador: { barrioPontevedra: user.barrioPontevedra },
+        OR: audiences,
       },
       include: {
         creador: { select: { nombre: true, avatarUrl: true } },
@@ -186,12 +203,19 @@ export class ConvocatoriasService {
             throw new ForbiddenException('No podés responder a tu propio aviso')
           }
 
-          const user = await tx.user.findUnique({ where: { id: userId } })
-          if (
-            !user?.barrioPontevedra ||
-            user.barrioPontevedra !== convocatoria.creador.barrioPontevedra
-          ) {
-            throw new ForbiddenException('Este aviso es para jugadores de otro barrio')
+          if (convocatoria.alcance === 'CONTACTOS') {
+            const contactIds = await acceptedContactIds(tx, convocatoria.creadorId)
+            if (!contactIds.includes(userId)) {
+              throw new ForbiddenException('Este aviso es solo para los contactos de quien lo creó')
+            }
+          } else {
+            const user = await tx.user.findUnique({ where: { id: userId } })
+            if (
+              !user?.barrioPontevedra ||
+              user.barrioPontevedra !== convocatoria.creador.barrioPontevedra
+            ) {
+              throw new ForbiddenException('Este aviso es para jugadores de otro barrio')
+            }
           }
           if (
             convocatoria.estado !== ESTADO_ABIERTA ||

@@ -1,6 +1,13 @@
 import { Injectable, NotFoundException } from '@nestjs/common'
-import type { Notificacion, Posicion, PushSubscription, RespuestaEstado } from '@prisma/client'
+import type {
+  Alcance,
+  Notificacion,
+  Posicion,
+  PushSubscription,
+  RespuestaEstado,
+} from '@prisma/client'
 import { PrismaService } from '../../common/prisma/prisma.service.js'
+import { acceptedContactIds } from '../contactos/contact-ids.js'
 import type { SubscribePushDto } from './dto/subscribe-push.dto.js'
 import { PushService } from './push.service.js'
 
@@ -28,13 +35,9 @@ export class NotificationsService {
       where: { id: convocatoriaId },
       include: { creador: true, cancha: true },
     })
-    const barrio = convocatoria?.creador.barrioPontevedra
-    if (!convocatoria || !barrio) return
+    if (!convocatoria) return
 
-    const recipients = await this.prisma.user.findMany({
-      where: { barrioPontevedra: barrio, id: { not: convocatoria.creadorId } },
-      include: { subscriptions: true },
-    })
+    const recipients = await this.findAudience(convocatoria)
     if (recipients.length === 0) return
 
     const titulo = `Falta un ${POSICION_LABEL[convocatoria.posicion]}`
@@ -137,6 +140,28 @@ export class NotificationsService {
       data: [{ userId: contacto.solicitanteId, titulo, cuerpo }],
     })
     await this.sendPush(contacto.solicitante.subscriptions, titulo, cuerpo, CONTACTOS_URL)
+  }
+
+  private async findAudience(convocatoria: {
+    alcance: Alcance
+    creadorId: string
+    creador: { barrioPontevedra: string | null }
+  }) {
+    if (convocatoria.alcance === 'CONTACTOS') {
+      const contactIds = await acceptedContactIds(this.prisma, convocatoria.creadorId)
+      if (contactIds.length === 0) return []
+      return this.prisma.user.findMany({
+        where: { id: { in: contactIds } },
+        include: { subscriptions: true },
+      })
+    }
+
+    const barrio = convocatoria.creador.barrioPontevedra
+    if (!barrio) return []
+    return this.prisma.user.findMany({
+      where: { barrioPontevedra: barrio, id: { not: convocatoria.creadorId } },
+      include: { subscriptions: true },
+    })
   }
 
   private findContact(contactoId: string) {

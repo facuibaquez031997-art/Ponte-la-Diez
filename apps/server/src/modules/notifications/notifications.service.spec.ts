@@ -37,7 +37,10 @@ const makeDeps = () => {
       update: vi.fn(async (_args?: object) => ({})),
       updateMany: vi.fn(async (_args?: object) => ({ count: 2 })),
     },
-    contacto: { findUnique: vi.fn(async (_args?: object) => null as unknown) },
+    contacto: {
+      findUnique: vi.fn(async (_args?: object) => null as unknown),
+      findMany: vi.fn(async (_args?: object) => [] as unknown[]),
+    },
     pushSubscription: {
       upsert: vi.fn(async (_args?: object) => ({})),
       deleteMany: vi.fn(async (_args?: object) => ({ count: 1 })),
@@ -248,6 +251,33 @@ describe('NotificationsService.notifyNewConvocatoria', () => {
     expect(args.data[0]?.titulo).toBe('Falta un arquero')
     expect(args.data[0]?.cuerpo).toContain('Facu')
     expect(args.data[0]?.cuerpo).toContain('Traé botines')
+  })
+
+  it('notifies the contacts, not the barrio, for a CONTACTOS call', async () => {
+    const { prisma, service } = makeDeps()
+    prisma.convocatoria.findUnique.mockResolvedValue({ ...convocatoria, alcance: 'CONTACTOS' })
+    prisma.contacto.findMany.mockResolvedValue([
+      { solicitanteId: 'creator', destinatarioId: 'u7' },
+      { solicitanteId: 'u8', destinatarioId: 'creator' },
+    ])
+
+    await service.notifyNewConvocatoria('c1')
+
+    const args = prisma.user.findMany.mock.calls[0]?.[0] as unknown as {
+      where: { id: { in: string[] }; barrioPontevedra?: string }
+    }
+    expect(args.where.id).toEqual({ in: ['u7', 'u8'] })
+    expect(args.where.barrioPontevedra).toBeUndefined()
+  })
+
+  it('notifies nobody for a CONTACTOS call without contacts', async () => {
+    const { prisma, service } = makeDeps()
+    prisma.convocatoria.findUnique.mockResolvedValue({ ...convocatoria, alcance: 'CONTACTOS' })
+
+    await service.notifyNewConvocatoria('c1')
+
+    expect(prisma.user.findMany).not.toHaveBeenCalled()
+    expect(prisma.notificacion.createMany).not.toHaveBeenCalled()
   })
 
   it('asks for "un jugador" when any position is welcome', async () => {

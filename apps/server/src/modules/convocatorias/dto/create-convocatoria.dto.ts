@@ -1,4 +1,4 @@
-import { Posicion } from '@prisma/client'
+import { Alcance, Posicion } from '@prisma/client'
 import { Type } from 'class-transformer'
 import {
   IsDate,
@@ -21,6 +21,10 @@ export class CreateConvocatoriaDto {
   @IsString()
   @MaxLength(80)
   canchaNombre?: string
+
+  @IsOptional()
+  @IsEnum(Alcance)
+  alcance?: Alcance
 
   @Type(() => Date)
   @IsDate()
