@@ -4,6 +4,10 @@ export interface ContactUser {
   avatarUrl: string | null
 }
 
+export interface ContactSearchResult extends ContactUser {
+  barrioPontevedra: string | null
+}
+
 export interface ContactEntry {
   id: string
   usuario: ContactUser

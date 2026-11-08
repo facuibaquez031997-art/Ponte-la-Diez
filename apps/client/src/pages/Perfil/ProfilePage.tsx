@@ -128,6 +128,27 @@ const ProfilePage = () => {
         </div>
       </section>
 
+      {user.rol === 'PLAYER' && !user.avatarUrl && (
+        <div
+          role="alert"
+          className="flex items-start gap-3 rounded-2xl bg-secondary-container/40 p-4 text-on-surface"
+        >
+          <span
+            aria-hidden="true"
+            className="material-symbols-outlined mt-0.5 shrink-0 text-[22px]"
+          >
+            add_a_photo
+          </span>
+          <div className="flex flex-col gap-0.5">
+            <span className="text-sm font-semibold">Subí tu foto de perfil para continuar</span>
+            <p className="text-xs">
+              Es obligatoria: así tus amigos te reconocen cuando te buscan para sumarte a sus
+              partidos. Usá el botón de la cámara en tu carnet.
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12 lg:gap-8">
         <div className="flex flex-col gap-6 lg:col-span-5">
           <div className="relative flex flex-col gap-4 overflow-hidden rounded-3xl bg-primary-container p-6 text-on-primary shadow-xl">
@@ -182,7 +203,7 @@ const ProfilePage = () => {
                 </button>
               </div>
               <p className="text-xs text-secondary-fixed-dim">JPG, PNG o WebP hasta 5 MB</p>
-              {user.avatarUrl && (
+              {user.avatarUrl && user.rol !== 'PLAYER' && (
                 <button
                   type="button"
                   disabled={photoBusy}

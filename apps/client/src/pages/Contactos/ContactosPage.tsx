@@ -1,32 +1,42 @@
-import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import ConfirmDialog from '../../components/common/ConfirmDialog'
-import FormField from '../../components/common/FormField'
 import { contactosService } from '../../services/contactos.service'
-import type { ContactEntry, ContactsOverview } from '../../types/contactos'
+import type {
+  ContactEntry,
+  ContactSearchResult,
+  ContactsOverview,
+  ContactUser,
+} from '../../types/contactos'
 import { getAuthErrorMessage } from '../Auth/authError'
 
 const REFRESH_INTERVAL_MS = 30_000
+const SEARCH_DEBOUNCE_MS = 300
+const SEARCH_MIN_LENGTH = 3
 
 const EMPTY_OVERVIEW: ContactsOverview = { contactos: [], recibidas: [], enviadas: [] }
 
 interface PlayerRowProps {
-  entry: ContactEntry
+  player: ContactUser
+  detail?: string
   children: ReactNode
 }
 
-const PlayerRow = ({ entry, children }: PlayerRowProps) => (
+const PlayerRow = ({ player, detail, children }: PlayerRowProps) => (
   <li className="flex items-center justify-between gap-3 rounded-2xl bg-surface-container-lowest p-4 shadow-sm">
     <div className="flex min-w-0 items-center gap-3">
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary-container">
-        {entry.usuario.avatarUrl ? (
-          <img src={entry.usuario.avatarUrl} alt="" className="h-full w-full object-cover" />
+      <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary-container">
+        {player.avatarUrl ? (
+          <img src={player.avatarUrl} alt="" className="h-full w-full object-cover" />
         ) : (
-          <span aria-hidden="true" className="material-symbols-outlined text-xl text-on-primary">
+          <span aria-hidden="true" className="material-symbols-outlined text-2xl text-on-primary">
             person
           </span>
         )}
       </div>
-      <span className="truncate text-sm font-semibold text-on-surface">{entry.usuario.nombre}</span>
+      <div className="flex min-w-0 flex-col">
+        <span className="truncate text-sm font-semibold text-on-surface">{player.nombre}</span>
+        {detail && <span className="truncate text-xs text-on-surface-variant">{detail}</span>}
+      </div>
     </div>
     <div className="flex shrink-0 gap-2">{children}</div>
   </li>
@@ -37,14 +47,22 @@ const SECONDARY_BUTTON =
 const PRIMARY_BUTTON =
   'rounded-full bg-primary-container px-4 py-2 text-sm font-semibold text-on-primary transition-colors hover:bg-secondary disabled:opacity-60'
 
+const asPlayer = (entry: ContactEntry) => entry.usuario
+
 const ContactosPage = () => {
   const [overview, setOverview] = useState<ContactsOverview>(EMPTY_OVERVIEW)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [email, setEmail] = useState('')
+  const [query, setQuery] = useState('')
+  const [found, setFound] = useState<{ term: string; items: ContactSearchResult[] } | null>(null)
   const [requestNotice, setRequestNotice] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [removing, setRemoving] = useState<ContactEntry | null>(null)
+
+  const term = query.trim()
+  const canSearch = term.length >= SEARCH_MIN_LENGTH
+  // Results of an older term are not shown while the newer search is in flight.
+  const results = canSearch && found?.term === term ? found.items : null
 
   const load = useCallback(async () => {
     try {
@@ -66,6 +84,23 @@ const ContactosPage = () => {
     }
   }, [load])
 
+  useEffect(() => {
+    if (!canSearch) return
+    let ignore = false
+    const timer = window.setTimeout(async () => {
+      try {
+        const items = await contactosService.search(term)
+        if (!ignore) setFound({ term, items })
+      } catch (err) {
+        if (!ignore) setError(getAuthErrorMessage(err))
+      }
+    }, SEARCH_DEBOUNCE_MS)
+    return () => {
+      ignore = true
+      window.clearTimeout(timer)
+    }
+  }, [canSearch, term])
+
   const runAction = async (action: () => Promise<unknown>) => {
     setBusy(true)
     let failure: string | null = null
@@ -79,15 +114,17 @@ const ContactosPage = () => {
     setBusy(false)
   }
 
-  const handleRequest = async (e: FormEvent) => {
-    e.preventDefault()
+  const handleRequest = async (player: ContactSearchResult) => {
     setRequestNotice(null)
-    let notice: string | null = null
     await runAction(async () => {
-      notice = (await contactosService.request(email.trim())).message
-      setEmail('')
+      await contactosService.requestUser(player.id)
+      setFound((current) =>
+        current
+          ? { ...current, items: current.items.filter((item) => item.id !== player.id) }
+          : current
+      )
+      setRequestNotice(`Le enviamos la solicitud a ${player.nombre}.`)
     })
-    setRequestNotice(notice)
   }
 
   const handleConfirmRemove = async () => {
@@ -103,7 +140,7 @@ const ContactosPage = () => {
           Contactos
         </h1>
         <p className="text-sm text-on-surface-variant">
-          Sumá a tus amigos con su email. Cuando aceptan, podés avisarles directamente cuando te
+          Buscá a tus amigos por nombre. Cuando aceptan, podés avisarles directamente cuando te
           falte uno.
         </p>
       </section>
@@ -117,39 +154,61 @@ const ContactosPage = () => {
         </p>
       )}
 
-      <form
-        onSubmit={handleRequest}
-        className="flex flex-col gap-3 rounded-3xl bg-surface-container-lowest p-6 shadow-sm md:flex-row md:items-end"
-      >
-        <div className="flex-1">
-          <FormField
-            id="contacto-email"
-            label="Email del jugador"
-            icon="alternate_email"
-            type="email"
-            required
-            maxLength={254}
-            placeholder="amigo@email.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+      <section aria-labelledby="search" className="flex flex-col gap-4">
+        <h2 id="search" className="font-display text-headline-sm uppercase text-on-surface">
+          Buscar jugadores
+        </h2>
+        <div className="relative flex items-center">
+          <span
+            aria-hidden="true"
+            className="material-symbols-outlined pointer-events-none absolute left-3.5 text-xl text-on-surface-variant"
+          >
+            search
+          </span>
+          <input
+            type="search"
+            aria-label="Nombre del jugador"
+            maxLength={80}
+            placeholder="Escribí al menos 3 letras del nombre"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="w-full rounded-xl bg-surface-container-low py-3 pl-11 pr-4 text-sm text-on-surface placeholder:text-on-surface-variant/60 transition-all focus:bg-surface-container-lowest focus:outline-none focus:ring-2 focus:ring-secondary-container"
           />
         </div>
-        <button
-          type="submit"
-          disabled={busy}
-          className="flex h-12 items-center justify-center gap-2 rounded-full bg-primary-container px-8 font-display text-headline-sm uppercase tracking-wide text-on-primary shadow-md transition-all hover:bg-secondary active:scale-95 disabled:opacity-60"
-        >
-          <span aria-hidden="true" className="material-symbols-outlined text-xl">
-            person_add
-          </span>
-          Enviar solicitud
-        </button>
         {requestNotice && (
-          <p role="status" className="text-sm text-on-surface-variant md:basis-full">
+          <p role="status" className="text-sm text-on-surface-variant">
             {requestNotice}
           </p>
         )}
-      </form>
+        {canSearch && results === null && (
+          <p className="text-sm text-on-surface-variant">Buscando...</p>
+        )}
+        {results !== null && results.length === 0 && (
+          <p className="rounded-2xl bg-surface-container-low p-6 text-sm text-on-surface-variant">
+            No encontramos jugadores con ese nombre.
+          </p>
+        )}
+        {results !== null && results.length > 0 && (
+          <ul className="flex flex-col gap-3">
+            {results.map((player) => (
+              <PlayerRow
+                key={player.id}
+                player={player}
+                detail={player.barrioPontevedra ?? 'Sin barrio'}
+              >
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void handleRequest(player)}
+                  className={PRIMARY_BUTTON}
+                >
+                  Enviar solicitud
+                </button>
+              </PlayerRow>
+            ))}
+          </ul>
+        )}
+      </section>
 
       {overview.recibidas.length > 0 && (
         <section aria-labelledby="received" className="flex flex-col gap-4">
@@ -158,7 +217,7 @@ const ContactosPage = () => {
           </h2>
           <ul className="flex flex-col gap-3">
             {overview.recibidas.map((entry) => (
-              <PlayerRow key={entry.id} entry={entry}>
+              <PlayerRow key={entry.id} player={asPlayer(entry)}>
                 <button
                   type="button"
                   disabled={busy}
@@ -192,7 +251,7 @@ const ContactosPage = () => {
         ) : (
           <ul className="flex flex-col gap-3">
             {overview.contactos.map((entry) => (
-              <PlayerRow key={entry.id} entry={entry}>
+              <PlayerRow key={entry.id} player={asPlayer(entry)}>
                 <button
                   type="button"
                   disabled={busy}
@@ -214,8 +273,7 @@ const ContactosPage = () => {
           </h2>
           <ul className="flex flex-col gap-3">
             {overview.enviadas.map((entry) => (
-              <PlayerRow key={entry.id} entry={entry}>
-                <span className="self-center text-xs text-on-surface-variant">Esperando</span>
+              <PlayerRow key={entry.id} player={asPlayer(entry)} detail="Esperando respuesta">
                 <button
                   type="button"
                   disabled={busy}
