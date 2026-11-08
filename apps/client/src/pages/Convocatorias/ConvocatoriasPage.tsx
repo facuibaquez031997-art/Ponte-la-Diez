@@ -5,7 +5,7 @@ import TeamList from '../../components/common/TeamList'
 import { useAuth } from '../../hooks/useAuth'
 import { convocatoriasService } from '../../services/convocatorias.service'
 import {
-  POSICION_LABELS,
+  POSICION_NOUNS,
   type BarrioConvocatoria,
   type Convocatoria,
   type ConvocatoriaTeam,
@@ -26,11 +26,10 @@ const formatDate = (iso: string) =>
   })
 
 const missingLabel = (call: Convocatoria) => {
-  const position =
-    call.posicion === 'TODOS' ? 'jugador' : POSICION_LABELS[call.posicion].toLowerCase()
+  const { singular, plural } = POSICION_NOUNS[call.posicion]
   return call.jugadoresFaltantes === 1
-    ? `Falta 1 ${position}`
-    : `Faltan ${call.jugadoresFaltantes} ${position}s`
+    ? `Falta 1 ${singular}`
+    : `Faltan ${call.jugadoresFaltantes} ${plural}`
 }
 
 interface CallDetailsProps {

@@ -8,6 +8,15 @@ export const POSICION_LABELS: Record<Posicion, string> = {
   TODOS: 'Todos',
 }
 
+/** Spanish plurals are not "singular + s" (defensor -> defensores), so each one is spelled out. */
+export const POSICION_NOUNS: Record<Posicion, { singular: string; plural: string }> = {
+  ARQUERO: { singular: 'arquero', plural: 'arqueros' },
+  DEFENSOR: { singular: 'defensor', plural: 'defensores' },
+  MEDIOCAMPISTA: { singular: 'mediocampista', plural: 'mediocampistas' },
+  DELANTERO: { singular: 'delantero', plural: 'delanteros' },
+  TODOS: { singular: 'jugador', plural: 'jugadores' },
+}
+
 export type Alcance = 'BARRIO' | 'CONTACTOS'
 
 export interface CreateConvocatoriaPayload {
