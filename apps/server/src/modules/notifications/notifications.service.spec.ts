@@ -72,6 +72,33 @@ describe('NotificationsService.notifyNewConvocatoria', () => {
     expect(args.data[0]?.cuerpo).toContain('Traé botines')
   })
 
+  it('names the linked court in the body', async () => {
+    const { prisma, service } = makeDeps()
+
+    await service.notifyNewConvocatoria('c1')
+
+    const args = prisma.notificacion.createMany.mock.calls[0]?.[0] as unknown as {
+      data: Array<{ cuerpo: string }>
+    }
+    expect(args.data[0]?.cuerpo).toContain('Cancha La 10')
+  })
+
+  it('names the free-text court when there is no linked court', async () => {
+    const { prisma, service } = makeDeps()
+    prisma.convocatoria.findUnique.mockResolvedValue({
+      ...convocatoria,
+      cancha: null,
+      canchaNombre: 'Cancha de Don Pepe',
+    })
+
+    await service.notifyNewConvocatoria('c1')
+
+    const args = prisma.notificacion.createMany.mock.calls[0]?.[0] as unknown as {
+      data: Array<{ cuerpo: string }>
+    }
+    expect(args.data[0]?.cuerpo).toContain('Cancha de Don Pepe')
+  })
+
   it('sends a push to every subscription of every recipient', async () => {
     const { push, service } = makeDeps()
 

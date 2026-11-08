@@ -109,8 +109,10 @@ export class NotificationsService {
     mensaje: string | null
     creador: { nombre: string }
     cancha: { nombre: string } | null
+    canchaNombre: string | null
   }): string {
-    const lugar = convocatoria.cancha ? ` en ${convocatoria.cancha.nombre}` : ''
+    const nombreCancha = convocatoria.cancha?.nombre ?? convocatoria.canchaNombre
+    const lugar = nombreCancha ? ` en ${nombreCancha}` : ''
     const detalle = convocatoria.mensaje ? ` · ${convocatoria.mensaje}` : ''
     return `${convocatoria.creador.nombre} busca jugador${lugar}${detalle}`
   }

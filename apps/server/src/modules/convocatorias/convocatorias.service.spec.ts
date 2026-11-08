@@ -51,6 +51,17 @@ describe('ConvocatoriasService.create', () => {
     })
   })
 
+  it('stores the free-text court name', async () => {
+    const { prisma, service } = makeService()
+    prisma.user.findUnique.mockResolvedValue({ id: 'u1', barrioPontevedra: 'Barrio El Sol' })
+
+    await service.create('u1', { ...baseDto, canchaNombre: 'Cancha de Don Pepe' })
+
+    expect(prisma.convocatoria.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ canchaNombre: 'Cancha de Don Pepe' }),
+    })
+  })
+
   it('notifies the neighborhood about the created call', async () => {
     const { prisma, notifications, service } = makeService()
     prisma.user.findUnique.mockResolvedValue({ id: 'u1', barrioPontevedra: 'Barrio El Sol' })

@@ -109,6 +109,7 @@ model Convocatoria {
   creador            User           @relation(fields: [creadorId], references: [id])
   canchaId           String?
   cancha             Cancha?        @relation(fields: [canchaId], references: [id])
+  canchaNombre       String?
   fechaHora          DateTime
   jugadoresFaltantes Int
   posicion           Posicion

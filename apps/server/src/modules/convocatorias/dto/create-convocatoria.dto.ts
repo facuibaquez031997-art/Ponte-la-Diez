@@ -17,6 +17,11 @@ export class CreateConvocatoriaDto {
   @IsUUID()
   canchaId?: string
 
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  canchaNombre?: string
+
   @Type(() => Date)
   @IsDate()
   fechaHora!: Date

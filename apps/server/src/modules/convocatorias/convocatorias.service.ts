@@ -38,6 +38,7 @@ export class ConvocatoriasService {
       data: {
         creadorId: userId,
         canchaId: dto.canchaId,
+        canchaNombre: dto.canchaNombre,
         fechaHora: dto.fechaHora,
         posicion: dto.posicion,
         jugadoresFaltantes: dto.jugadoresFaltantes,
