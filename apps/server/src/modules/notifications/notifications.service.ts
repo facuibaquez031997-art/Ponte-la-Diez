@@ -6,6 +6,7 @@ import { PushService } from './push.service.js'
 
 const INBOX_PAGE_SIZE = 50
 const CONVOCATORIAS_URL = '/convocatorias'
+const CONTACTOS_URL = '/contactos'
 
 const POSICION_LABEL: Record<Posicion, string> = {
   ARQUERO: 'arquero',
@@ -112,15 +113,50 @@ export class NotificationsService {
     )
   }
 
+  async notifyContactRequest(contactoId: string): Promise<void> {
+    const contacto = await this.findContact(contactoId)
+    if (!contacto) return
+
+    const titulo = `${contacto.solicitante.nombre} quiere ser tu contacto`
+    const cuerpo = 'Aceptá o rechazá la solicitud desde Contactos.'
+
+    await this.prisma.notificacion.createMany({
+      data: [{ userId: contacto.destinatarioId, titulo, cuerpo }],
+    })
+    await this.sendPush(contacto.destinatario.subscriptions, titulo, cuerpo, CONTACTOS_URL)
+  }
+
+  async notifyContactAccepted(contactoId: string): Promise<void> {
+    const contacto = await this.findContact(contactoId)
+    if (!contacto) return
+
+    const titulo = `${contacto.destinatario.nombre} aceptó tu solicitud`
+    const cuerpo = 'Ya son contactos: podés avisarle cuando te falte uno.'
+
+    await this.prisma.notificacion.createMany({
+      data: [{ userId: contacto.solicitanteId, titulo, cuerpo }],
+    })
+    await this.sendPush(contacto.solicitante.subscriptions, titulo, cuerpo, CONTACTOS_URL)
+  }
+
+  private findContact(contactoId: string) {
+    return this.prisma.contacto.findUnique({
+      where: { id: contactoId },
+      include: {
+        solicitante: { include: { subscriptions: true } },
+        destinatario: { include: { subscriptions: true } },
+      },
+    })
+  }
+
   private async sendPush(
     targets: PushSubscription[],
     titulo: string,
-    cuerpo: string
+    cuerpo: string,
+    url: string = CONVOCATORIAS_URL
   ): Promise<void> {
     const results = await Promise.all(
-      targets.map((target) =>
-        this.push.send(target, { title: titulo, body: cuerpo, url: CONVOCATORIAS_URL })
-      )
+      targets.map((target) => this.push.send(target, { title: titulo, body: cuerpo, url }))
     )
 
     const gone = targets.filter((_, index) => results[index] === 'gone').map((t) => t.endpoint)

@@ -30,6 +30,11 @@ enum RespuestaEstado {
   DECLINADA
 }
 
+enum ContactoEstado {
+  PENDIENTE
+  ACEPTADO
+}
+
 enum TurnoState {
   FREE
   RESERVED
@@ -49,21 +54,36 @@ enum PaymentState {
 }
 
 model User {
-  id               String                  @id @default(uuid())
-  nombre           String
-  email            String                  @unique
-  passwordHash     String
-  rol              Role                    @default(PLAYER)
-  telefono         String?
-  barrioPontevedra String?
-  avatarUrl        String?
-  createdAt        DateTime                @default(now())
-  canchas          Cancha[]                @relation("OwnerCanchas")
-  reservas         Reserva[]
-  convocatorias    Convocatoria[]
-  subscriptions    PushSubscription[]
-  notificaciones   Notificacion[]
-  respuestas       RespuestaConvocatoria[]
+  id                 String                  @id @default(uuid())
+  nombre             String
+  email              String                  @unique
+  passwordHash       String
+  rol                Role                    @default(PLAYER)
+  telefono           String?
+  barrioPontevedra   String?
+  avatarUrl          String?
+  createdAt          DateTime                @default(now())
+  canchas            Cancha[]                @relation("OwnerCanchas")
+  reservas           Reserva[]
+  convocatorias      Convocatoria[]
+  subscriptions      PushSubscription[]
+  notificaciones     Notificacion[]
+  respuestas         RespuestaConvocatoria[]
+  contactosEnviados  Contacto[]              @relation("ContactosEnviados")
+  contactosRecibidos Contacto[]              @relation("ContactosRecibidos")
+}
+
+model Contacto {
+  id             String         @id @default(uuid())
+  solicitanteId  String
+  solicitante    User           @relation("ContactosEnviados", fields: [solicitanteId], references: [id])
+  destinatarioId String
+  destinatario   User           @relation("ContactosRecibidos", fields: [destinatarioId], references: [id])
+  estado         ContactoEstado @default(PENDIENTE)
+  createdAt      DateTime       @default(now())
+
+  @@unique([solicitanteId, destinatarioId])
+  @@index([destinatarioId, estado])
 }
 
 model Cancha {

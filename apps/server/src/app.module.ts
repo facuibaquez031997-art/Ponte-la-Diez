@@ -6,6 +6,7 @@ import { validateEnv } from './config/env.config.js'
 import { EngramModule } from './engram/engram.module.js'
 import { GentleAiModule } from './gentle-ai/gentle-ai.module.js'
 import { AuthModule } from './modules/auth/auth.module.js'
+import { ContactosModule } from './modules/contactos/contactos.module.js'
 import { ConvocatoriasModule } from './modules/convocatorias/convocatorias.module.js'
 import { NotificationsModule } from './modules/notifications/notifications.module.js'
 import { UsersModule } from './modules/users/users.module.js'
@@ -17,6 +18,7 @@ import { UsersModule } from './modules/users/users.module.js'
     HealthModule,
     AuthModule,
     UsersModule,
+    ContactosModule,
     ConvocatoriasModule,
     NotificationsModule,
     EngramModule,

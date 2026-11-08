@@ -37,6 +37,7 @@ const makeDeps = () => {
       update: vi.fn(async (_args?: object) => ({})),
       updateMany: vi.fn(async (_args?: object) => ({ count: 2 })),
     },
+    contacto: { findUnique: vi.fn(async (_args?: object) => null as unknown) },
     pushSubscription: {
       upsert: vi.fn(async (_args?: object) => ({})),
       deleteMany: vi.fn(async (_args?: object) => ({ count: 1 })),
@@ -61,6 +62,66 @@ describe('NotificationsService.clearForConvocatoria', () => {
 type Created = {
   data: Array<{ userId: string; convocatoriaId: string; titulo: string; cuerpo: string }>
 }
+
+describe('NotificationsService contact notifications', () => {
+  const contacto = (subscriptions = [sub('e1')]) => ({
+    id: 'k1',
+    solicitanteId: 'u1',
+    destinatarioId: 'u2',
+    solicitante: { id: 'u1', nombre: 'Facu', subscriptions },
+    destinatario: { id: 'u2', nombre: 'Ana', subscriptions },
+  })
+
+  it('tells the addressee about a new request, not linked to any call', async () => {
+    const { prisma, push, service } = makeDeps()
+    prisma.contacto.findUnique.mockResolvedValue(contacto())
+
+    await service.notifyContactRequest('k1')
+
+    const args = prisma.notificacion.createMany.mock.calls[0]?.[0] as unknown as {
+      data: Array<{ userId: string; convocatoriaId?: string; titulo: string }>
+    }
+    expect(args.data).toHaveLength(1)
+    expect(args.data[0]?.userId).toBe('u2')
+    expect(args.data[0]?.convocatoriaId).toBeUndefined()
+    expect(args.data[0]?.titulo).toBe('Facu quiere ser tu contacto')
+    expect(push.send).toHaveBeenCalledTimes(1)
+  })
+
+  it('points the push of a contact request to the contacts page', async () => {
+    const { prisma, push, service } = makeDeps()
+    prisma.contacto.findUnique.mockResolvedValue(contacto())
+
+    await service.notifyContactRequest('k1')
+
+    expect(push.send).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ url: '/contactos' })
+    )
+  })
+
+  it('tells the requester that the addressee accepted', async () => {
+    const { prisma, service } = makeDeps()
+    prisma.contacto.findUnique.mockResolvedValue(contacto())
+
+    await service.notifyContactAccepted('k1')
+
+    const args = prisma.notificacion.createMany.mock.calls[0]?.[0] as unknown as {
+      data: Array<{ userId: string; titulo: string }>
+    }
+    expect(args.data[0]?.userId).toBe('u1')
+    expect(args.data[0]?.titulo).toBe('Ana aceptó tu solicitud')
+  })
+
+  it('does nothing when the contact no longer exists', async () => {
+    const { prisma, service } = makeDeps()
+
+    await service.notifyContactRequest('gone')
+    await service.notifyContactAccepted('gone')
+
+    expect(prisma.notificacion.createMany).not.toHaveBeenCalled()
+  })
+})
 
 describe('NotificationsService.notifyResponse', () => {
   const withCreator = (subscriptions = [sub('e1')]) => ({
