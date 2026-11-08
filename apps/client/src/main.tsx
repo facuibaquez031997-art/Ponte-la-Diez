@@ -5,6 +5,7 @@ import App from './App'
 import ProtectedRoute from './components/common/ProtectedRoute'
 import { AuthProvider } from './context/AuthProvider'
 import LoginPage from './pages/Auth/LoginPage'
+import ContactosPage from './pages/Contactos/ContactosPage'
 import ConvocatoriasPage from './pages/Convocatorias/ConvocatoriasPage'
 import ExplorarCanchasPage from './pages/Canchas/ExplorarCanchasPage'
 import RegisterPage from './pages/Auth/RegisterPage'
@@ -24,6 +25,7 @@ const router = createBrowserRouter([
         children: [
           { path: 'perfil', element: <ProfilePage /> },
           { path: 'convocatorias', element: <ConvocatoriasPage /> },
+          { path: 'contactos', element: <ContactosPage /> },
         ],
       },
       { path: 'login', element: <LoginPage /> },

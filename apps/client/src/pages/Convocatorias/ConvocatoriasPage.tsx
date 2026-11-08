@@ -26,7 +26,8 @@ const formatDate = (iso: string) =>
   })
 
 const missingLabel = (call: Convocatoria) => {
-  const position = POSICION_LABELS[call.posicion].toLowerCase()
+  const position =
+    call.posicion === 'TODOS' ? 'jugador' : POSICION_LABELS[call.posicion].toLowerCase()
   return call.jugadoresFaltantes === 1
     ? `Falta 1 ${position}`
     : `Faltan ${call.jugadoresFaltantes} ${position}s`
@@ -41,6 +42,14 @@ const CallDetails = ({ call }: CallDetailsProps) => (
     <span className="font-display text-headline-sm uppercase text-on-surface">
       {missingLabel(call)}
     </span>
+    {call.alcance === 'CONTACTOS' && (
+      <span className="flex w-fit items-center gap-1 rounded-full bg-secondary-container/40 px-2 py-0.5 text-xs font-semibold text-on-surface">
+        <span aria-hidden="true" className="material-symbols-outlined text-[14px]">
+          group
+        </span>
+        Solo contactos
+      </span>
+    )}
     <span className="text-sm capitalize text-on-surface-variant">{formatDate(call.fechaHora)}</span>
     {call.canchaNombre && (
       <span className="flex items-center gap-1 text-sm text-on-surface-variant">
@@ -137,8 +146,8 @@ const ConvocatoriasPage = () => {
         </h1>
         <p className="text-sm text-on-surface-variant">
           {user?.barrioPontevedra
-            ? `Partidos de ${user.barrioPontevedra} que buscan jugador.`
-            : 'Elegí tu barrio en el perfil para ver los avisos de tu zona.'}
+            ? `Partidos de ${user.barrioPontevedra} y de tus contactos que buscan jugador.`
+            : 'Elegí tu barrio en el perfil para ver los avisos de tu zona. Los avisos de tus contactos se ven igual.'}
         </p>
       </section>
 
@@ -153,13 +162,13 @@ const ConvocatoriasPage = () => {
 
       <section aria-labelledby="barrio-calls" className="flex flex-col gap-4">
         <h2 id="barrio-calls" className="font-display text-headline-sm uppercase text-on-surface">
-          En tu barrio
+          Para vos
         </h2>
         {loading ? (
           <p className="text-sm text-on-surface-variant">Cargando avisos...</p>
         ) : othersCalls.length === 0 ? (
           <p className="rounded-2xl bg-surface-container-low p-6 text-sm text-on-surface-variant">
-            Por ahora nadie de tu barrio busca jugador.
+            Por ahora nadie de tu barrio ni de tus contactos busca jugador.
           </p>
         ) : (
           <ul className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">

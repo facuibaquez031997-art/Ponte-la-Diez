@@ -8,7 +8,10 @@ export const POSICION_LABELS: Record<Posicion, string> = {
   TODOS: 'Todos',
 }
 
+export type Alcance = 'BARRIO' | 'CONTACTOS'
+
 export interface CreateConvocatoriaPayload {
+  alcance: Alcance
   canchaNombre?: string
   fechaHora: string
   posicion: Posicion
@@ -19,6 +22,7 @@ export interface CreateConvocatoriaPayload {
 export interface Convocatoria {
   id: string
   creadorId: string
+  alcance: Alcance
   canchaId: string | null
   canchaNombre: string | null
   fechaHora: string

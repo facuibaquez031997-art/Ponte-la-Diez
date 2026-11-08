@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { convocatoriasService } from '../../services/convocatorias.service'
-import { POSICION_LABELS, type Posicion } from '../../types/convocatorias'
+import { POSICION_LABELS, type Alcance, type Posicion } from '../../types/convocatorias'
 import { getAuthErrorMessage } from '../../pages/Auth/authError'
 import FormField from './FormField'
 
@@ -16,6 +16,7 @@ interface FaltaUnoFormProps {
 }
 
 const FaltaUnoForm = ({ barrio }: FaltaUnoFormProps) => {
+  const [alcance, setAlcance] = useState<Alcance>('BARRIO')
   const [canchaNombre, setCanchaNombre] = useState('')
   const [fechaHora, setFechaHora] = useState('')
   const [posicion, setPosicion] = useState<Posicion>('ARQUERO')
@@ -23,15 +24,25 @@ const FaltaUnoForm = ({ barrio }: FaltaUnoFormProps) => {
   const [mensaje, setMensaje] = useState('')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [sent, setSent] = useState(false)
+  const [sentTo, setSentTo] = useState<Alcance | null>(null)
+  const sent = sentTo !== null
+
+  const missingBarrio = alcance === 'BARRIO' && !barrio
+  const audienceHint =
+    alcance === 'CONTACTOS'
+      ? 'Solo les llega a las personas que ya aceptaron ser tus contactos.'
+      : barrio
+        ? `Avisá a los jugadores de ${barrio} que te falta alguien para el partido.`
+        : 'Elegí tu barrio y guardá el perfil para avisar a tu barrio, o avisá solo a tus contactos.'
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setError(null)
-    setSent(false)
+    setSentTo(null)
     setSending(true)
     try {
       await convocatoriasService.create({
+        alcance,
         canchaNombre: canchaNombre.trim() || undefined,
         fechaHora: new Date(fechaHora).toISOString(),
         posicion,
@@ -43,7 +54,7 @@ const FaltaUnoForm = ({ barrio }: FaltaUnoFormProps) => {
       setPosicion('ARQUERO')
       setJugadoresFaltantes(1)
       setMensaje('')
-      setSent(true)
+      setSentTo(alcance)
     } catch (err) {
       setError(getAuthErrorMessage(err))
     } finally {
@@ -65,14 +76,28 @@ const FaltaUnoForm = ({ barrio }: FaltaUnoFormProps) => {
           </span>
           <h3 className="font-display text-headline-sm uppercase text-on-surface">Falta uno</h3>
         </div>
-        <p className="text-sm text-on-surface-variant">
-          {barrio
-            ? `Avisá a los jugadores de ${barrio} que te falta alguien para el partido.`
-            : 'Elegí tu barrio y guardá el perfil para poder avisar que falta un jugador.'}
-        </p>
+        <p className="text-sm text-on-surface-variant">{audienceHint}</p>
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="flex flex-col gap-1.5 md:col-span-2">
+          <label
+            htmlFor="falta-uno-alcance"
+            className="text-label-sm uppercase tracking-wider text-on-surface"
+          >
+            A quién avisar
+          </label>
+          <select
+            id="falta-uno-alcance"
+            value={alcance}
+            onChange={(e) => setAlcance(e.target.value as Alcance)}
+            className={FIELD_CLASS}
+          >
+            <option value="BARRIO">Jugadores de mi barrio</option>
+            <option value="CONTACTOS">Solo mis contactos</option>
+          </select>
+        </div>
+
         <FormField
           id="falta-uno-cancha"
           label="Cancha (opcional)"
@@ -157,14 +182,16 @@ const FaltaUnoForm = ({ barrio }: FaltaUnoFormProps) => {
       )}
       {sent && (
         <p role="status" className="rounded-xl bg-secondary-container/30 px-4 py-3 text-sm">
-          ¡Listo! Avisamos a los jugadores de tu barrio.
+          {sentTo === 'CONTACTOS'
+            ? '¡Listo! Avisamos a tus contactos.'
+            : '¡Listo! Avisamos a los jugadores de tu barrio.'}
         </p>
       )}
 
       <div className="flex justify-end">
         <button
           type="submit"
-          disabled={sending || !barrio}
+          disabled={sending || missingBarrio}
           className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-primary-container px-8 font-display text-headline-sm uppercase tracking-wide text-on-primary shadow-md transition-all hover:bg-secondary active:scale-95 disabled:opacity-60 sm:w-auto"
         >
           <span aria-hidden="true" className="material-symbols-outlined text-xl">
