@@ -350,6 +350,22 @@ describe('ContactosService.remove', () => {
     expect(prisma.contacto.delete).toHaveBeenCalledWith({ where: { id: 'k1' } })
   })
 
+  it.each(['PENDIENTE', 'ACEPTADO'])('notifies nobody when a %s row is removed', async (estado) => {
+    const { prisma, notifications, service } = makeService()
+    prisma.contacto.findUnique.mockResolvedValue({
+      id: 'k1',
+      estado,
+      solicitanteId: 'u1',
+      destinatarioId: 'u2',
+    })
+
+    await service.remove('u1', 'k1')
+
+    expect(prisma.contacto.delete).toHaveBeenCalledWith({ where: { id: 'k1' } })
+    expect(notifications.notifyContactRequest).not.toHaveBeenCalled()
+    expect(notifications.notifyContactAccepted).not.toHaveBeenCalled()
+  })
+
   it('hides a row from a player who is not part of it', async () => {
     const { prisma, service } = makeService()
     prisma.contacto.findUnique.mockResolvedValue({

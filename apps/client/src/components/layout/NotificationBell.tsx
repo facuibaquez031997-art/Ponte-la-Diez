@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useNotifications } from '../../hooks/useNotifications'
 import { usePushSubscription, type PushStatus } from '../../hooks/usePushSubscription'
+import type { AppNotification } from '../../types/notifications'
+import { notificationTarget } from './notificationTarget'
 
 const formatAgo = (isoDate: string): string => {
   const minutes = Math.max(0, Math.round((Date.now() - new Date(isoDate).getTime()) / 60_000))
@@ -22,6 +25,7 @@ const NotificationBell = () => {
   const { items, unread, refreshList, markRead, markAllRead } = useNotifications()
   const push = usePushSubscription()
   const [open, setOpen] = useState(false)
+  const navigate = useNavigate()
   const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -43,6 +47,12 @@ const NotificationBell = () => {
   const toggle = () => {
     if (!open) void refreshList()
     setOpen((current) => !current)
+  }
+
+  const handleSelect = (item: AppNotification) => {
+    if (!item.leida) void markRead(item.id)
+    setOpen(false)
+    navigate(notificationTarget(item))
   }
 
   const hint = PUSH_HINTS[push.status]
@@ -100,7 +110,7 @@ const NotificationBell = () => {
               <li key={item.id}>
                 <button
                   type="button"
-                  onClick={() => !item.leida && void markRead(item.id)}
+                  onClick={() => handleSelect(item)}
                   className={`flex w-full gap-3 rounded-2xl px-3 py-3 text-left transition-colors hover:bg-surface-container ${
                     item.leida ? '' : 'bg-secondary-fixed/40'
                   }`}
