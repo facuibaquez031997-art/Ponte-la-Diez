@@ -24,6 +24,11 @@ enum Alcance {
   CONTACTOS
 }
 
+enum RespuestaEstado {
+  ACEPTADA
+  DECLINADA
+}
+
 enum TurnoState {
   FREE
   RESERVED
@@ -43,20 +48,21 @@ enum PaymentState {
 }
 
 model User {
-  id               String             @id @default(uuid())
+  id               String                  @id @default(uuid())
   nombre           String
-  email            String             @unique
+  email            String                  @unique
   passwordHash     String
-  rol              Role               @default(PLAYER)
+  rol              Role                    @default(PLAYER)
   telefono         String?
   barrioPontevedra String?
   avatarUrl        String?
-  createdAt        DateTime           @default(now())
-  canchas          Cancha[]           @relation("OwnerCanchas")
+  createdAt        DateTime                @default(now())
+  canchas          Cancha[]                @relation("OwnerCanchas")
   reservas         Reserva[]
   convocatorias    Convocatoria[]
   subscriptions    PushSubscription[]
   notificaciones   Notificacion[]
+  respuestas       RespuestaConvocatoria[]
 }
 
 model Cancha {
@@ -104,19 +110,32 @@ model Pago {
 }
 
 model Convocatoria {
-  id                 String         @id @default(uuid())
+  id                 String                  @id @default(uuid())
   creadorId          String
-  creador            User           @relation(fields: [creadorId], references: [id])
+  creador            User                    @relation(fields: [creadorId], references: [id])
   canchaId           String?
-  cancha             Cancha?        @relation(fields: [canchaId], references: [id])
+  cancha             Cancha?                 @relation(fields: [canchaId], references: [id])
   canchaNombre       String?
   fechaHora          DateTime
   jugadoresFaltantes Int
   posicion           Posicion
   mensaje            String?
-  alcance            Alcance        @default(BARRIO)
-  estado             String         @default("ABIERTA")
+  alcance            Alcance                 @default(BARRIO)
+  estado             String                  @default("ABIERTA")
   notificaciones     Notificacion[]
+  respuestas         RespuestaConvocatoria[]
+}
+
+model RespuestaConvocatoria {
+  id             String          @id @default(uuid())
+  convocatoriaId String
+  convocatoria   Convocatoria    @relation(fields: [convocatoriaId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User            @relation(fields: [userId], references: [id])
+  estado         RespuestaEstado
+  createdAt      DateTime        @default(now())
+
+  @@unique([convocatoriaId, userId])
 }
 
 model PushSubscription {

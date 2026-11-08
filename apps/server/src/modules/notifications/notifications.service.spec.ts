@@ -19,6 +19,7 @@ const makeDeps = () => {
   const prisma = {
     convocatoria: { findUnique: vi.fn(async (_args?: object) => convocatoria as unknown) },
     user: {
+      findUnique: vi.fn(async (_args?: object) => ({ id: 'u2', nombre: 'Ana' }) as unknown),
       findMany: vi.fn(
         async (_args?: object) =>
           [
@@ -54,6 +55,109 @@ describe('NotificationsService.clearForConvocatoria', () => {
     expect(prisma.notificacion.deleteMany).toHaveBeenCalledWith({
       where: { convocatoriaId: 'c1' },
     })
+  })
+})
+
+type Created = {
+  data: Array<{ userId: string; convocatoriaId: string; titulo: string; cuerpo: string }>
+}
+
+describe('NotificationsService.notifyResponse', () => {
+  const withCreator = (subscriptions = [sub('e1')]) => ({
+    ...convocatoria,
+    creador: { id: 'creator', nombre: 'Facu', barrioPontevedra: 'Barrio El Sol', subscriptions },
+  })
+
+  it('tells only the creator that a player accepted', async () => {
+    const { prisma, service } = makeDeps()
+    prisma.convocatoria.findUnique.mockResolvedValue(withCreator())
+
+    await service.notifyResponse('c1', 'u2', 'ACEPTADA')
+
+    const args = prisma.notificacion.createMany.mock.calls[0]?.[0] as unknown as Created
+    expect(args.data).toHaveLength(1)
+    expect(args.data[0]?.userId).toBe('creator')
+    expect(args.data[0]?.convocatoriaId).toBe('c1')
+    expect(args.data[0]?.titulo).toBe('Ana aceptó')
+  })
+
+  it('tells the creator that a player declined', async () => {
+    const { prisma, service } = makeDeps()
+    prisma.convocatoria.findUnique.mockResolvedValue(withCreator())
+
+    await service.notifyResponse('c1', 'u2', 'DECLINADA')
+
+    const args = prisma.notificacion.createMany.mock.calls[0]?.[0] as unknown as Created
+    expect(args.data[0]?.titulo).toBe('Ana no aceptó')
+  })
+
+  it('sends a push to every subscription of the creator', async () => {
+    const { prisma, push, service } = makeDeps()
+    prisma.convocatoria.findUnique.mockResolvedValue(withCreator([sub('e1'), sub('e2')]))
+
+    await service.notifyResponse('c1', 'u2', 'ACEPTADA')
+
+    expect(push.send).toHaveBeenCalledTimes(2)
+  })
+
+  it('does nothing when the call or the player no longer exists', async () => {
+    const { prisma, service } = makeDeps()
+    prisma.convocatoria.findUnique.mockResolvedValue(null)
+
+    await service.notifyResponse('c1', 'u2', 'ACEPTADA')
+
+    expect(prisma.notificacion.createMany).not.toHaveBeenCalled()
+  })
+})
+
+describe('NotificationsService.notifyCancelled', () => {
+  const withAccepted = (users: Array<{ id: string; subscriptions: object[] }>) => ({
+    ...convocatoria,
+    respuestas: users.map((user) => ({ user })),
+  })
+
+  it('removes the old entries and notifies the accepted players', async () => {
+    const { prisma, service } = makeDeps()
+    prisma.convocatoria.findUnique.mockResolvedValue(
+      withAccepted([
+        { id: 'u2', subscriptions: [sub('e1')] },
+        { id: 'u3', subscriptions: [] },
+      ])
+    )
+
+    await service.notifyCancelled('c1')
+
+    expect(prisma.notificacion.deleteMany).toHaveBeenCalledWith({
+      where: { convocatoriaId: 'c1' },
+    })
+    const args = prisma.notificacion.createMany.mock.calls[0]?.[0] as unknown as Created
+    expect(args.data.map((n) => n.userId)).toEqual(['u2', 'u3'])
+    expect(args.data[0]?.titulo).toBe('Partido cancelado')
+    expect(args.data[0]?.cuerpo).toContain('Facu')
+    const clearedAt = prisma.notificacion.deleteMany.mock.invocationCallOrder[0] ?? 0
+    const createdAt = prisma.notificacion.createMany.mock.invocationCallOrder[0] ?? 0
+    expect(clearedAt).toBeLessThan(createdAt)
+  })
+
+  it('sends a push to the subscriptions of the accepted players', async () => {
+    const { prisma, push, service } = makeDeps()
+    prisma.convocatoria.findUnique.mockResolvedValue(
+      withAccepted([{ id: 'u2', subscriptions: [sub('e1'), sub('e2')] }])
+    )
+
+    await service.notifyCancelled('c1')
+
+    expect(push.send).toHaveBeenCalledTimes(2)
+  })
+
+  it('still removes the old entries when nobody had accepted', async () => {
+    const { prisma, service } = makeDeps()
+    prisma.convocatoria.findUnique.mockResolvedValue(withAccepted([]))
+
+    await service.notifyCancelled('c1')
+
+    expect(prisma.notificacion.deleteMany).toHaveBeenCalled()
+    expect(prisma.notificacion.createMany).not.toHaveBeenCalled()
   })
 })
 

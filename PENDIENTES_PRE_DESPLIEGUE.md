@@ -27,6 +27,7 @@ Estados: ⏳ Pendiente · ✅ Resuelto · ➖ Aceptado como está (anotar motivo
 | 19 | 4 - Push | Generar claves VAPID propias para producción (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`) y cargarlas como variables del hosting; no reutilizar las de desarrollo | ⏳ |
 | 20 | 4 - Push | El aviso a un barrio grande se envía con `Promise.all` sin límite de concurrencia: procesar en lotes o con una cola antes de que haya muchos usuarios por barrio | ⏳ |
 | 21 | 4 - Push | Borrar los usuarios de prueba `t4.{a,b,c}.1793830377@example.com`, `t4b.{a,b}.1793830698@example.com` y `t4c.{a,b}.1793831356@example.com` y sus convocatorias y notificaciones de la base de desarrollo | ⏳ |
+| 23 | 4 - Falta Uno | Borrar los usuarios de prueba `t6.{c,a,b,d,f,e}.1794099785371@example.com` y su convocatoria, respuestas y notificaciones de la base de desarrollo | ⏳ |
 | 22 | 2 - Canchas | En el formulario "Falta uno" la cancha es texto libre (`Convocatoria.canchaNombre`): cuando exista el CRUD de canchas, reemplazarla por un selector que guarde `canchaId` y migrar o descartar `canchaNombre` | ⏳ |
 
 ---

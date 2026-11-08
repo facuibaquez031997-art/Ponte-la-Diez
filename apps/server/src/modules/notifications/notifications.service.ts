@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common'
-import type { Notificacion, Posicion } from '@prisma/client'
+import type { Notificacion, Posicion, PushSubscription, RespuestaEstado } from '@prisma/client'
 import { PrismaService } from '../../common/prisma/prisma.service.js'
 import type { SubscribePushDto } from './dto/subscribe-push.dto.js'
 import { PushService } from './push.service.js'
@@ -47,7 +47,75 @@ export class NotificationsService {
       })),
     })
 
-    const targets = recipients.flatMap((user) => user.subscriptions)
+    await this.sendPush(
+      recipients.flatMap((user) => user.subscriptions),
+      titulo,
+      cuerpo
+    )
+  }
+
+  async notifyResponse(
+    convocatoriaId: string,
+    responderId: string,
+    estado: RespuestaEstado
+  ): Promise<void> {
+    const [convocatoria, responder] = await Promise.all([
+      this.prisma.convocatoria.findUnique({
+        where: { id: convocatoriaId },
+        include: { creador: { include: { subscriptions: true } } },
+      }),
+      this.prisma.user.findUnique({ where: { id: responderId } }),
+    ])
+    if (!convocatoria || !responder) return
+
+    const titulo =
+      estado === 'ACEPTADA' ? `${responder.nombre} aceptó` : `${responder.nombre} no aceptó`
+    const cuerpo = `Tu aviso: falta un ${POSICION_LABEL[convocatoria.posicion]}`
+
+    await this.prisma.notificacion.createMany({
+      data: [{ userId: convocatoria.creadorId, convocatoriaId, titulo, cuerpo }],
+    })
+    await this.sendPush(convocatoria.creador.subscriptions, titulo, cuerpo)
+  }
+
+  async notifyCancelled(convocatoriaId: string): Promise<void> {
+    const convocatoria = await this.prisma.convocatoria.findUnique({
+      where: { id: convocatoriaId },
+      include: {
+        creador: true,
+        cancha: true,
+        respuestas: {
+          where: { estado: 'ACEPTADA' },
+          include: { user: { include: { subscriptions: true } } },
+        },
+      },
+    })
+    if (!convocatoria) return
+
+    // The barrio no longer needs the invitation, and the creator's answers inbox is moot too.
+    await this.clearForConvocatoria(convocatoriaId)
+
+    const players = convocatoria.respuestas.map((respuesta) => respuesta.user)
+    if (players.length === 0) return
+
+    const titulo = 'Partido cancelado'
+    const cuerpo = `${convocatoria.creador.nombre} canceló el partido${this.courtLabel(convocatoria)}`
+
+    await this.prisma.notificacion.createMany({
+      data: players.map((user) => ({ userId: user.id, convocatoriaId, titulo, cuerpo })),
+    })
+    await this.sendPush(
+      players.flatMap((user) => user.subscriptions),
+      titulo,
+      cuerpo
+    )
+  }
+
+  private async sendPush(
+    targets: PushSubscription[],
+    titulo: string,
+    cuerpo: string
+  ): Promise<void> {
     const results = await Promise.all(
       targets.map((target) =>
         this.push.send(target, { title: titulo, body: cuerpo, url: CONVOCATORIAS_URL })
@@ -109,15 +177,21 @@ export class NotificationsService {
     })
   }
 
+  private courtLabel(convocatoria: {
+    cancha: { nombre: string } | null
+    canchaNombre: string | null
+  }): string {
+    const nombreCancha = convocatoria.cancha?.nombre ?? convocatoria.canchaNombre
+    return nombreCancha ? ` en ${nombreCancha}` : ''
+  }
+
   private buildBody(convocatoria: {
     mensaje: string | null
     creador: { nombre: string }
     cancha: { nombre: string } | null
     canchaNombre: string | null
   }): string {
-    const nombreCancha = convocatoria.cancha?.nombre ?? convocatoria.canchaNombre
-    const lugar = nombreCancha ? ` en ${nombreCancha}` : ''
     const detalle = convocatoria.mensaje ? ` · ${convocatoria.mensaje}` : ''
-    return `${convocatoria.creador.nombre} busca jugador${lugar}${detalle}`
+    return `${convocatoria.creador.nombre} busca jugador${this.courtLabel(convocatoria)}${detalle}`
   }
 }
