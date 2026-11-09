@@ -126,6 +126,8 @@ const OwnerCanchasPage = () => {
               horarios={horarios[cancha.id]}
               onEdit={(target) => startForm({ kind: 'edit', cancha: target })}
               onDelete={setDeleting}
+              onPhotosChanged={load}
+              onError={setError}
             />
           ))}
           {!form && (

@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import type { Cancha, Franja } from '../../types/canchas'
+import CanchaPhotos from './CanchaPhotos'
 import { summarizeWeek } from './scheduleModel'
 
 const money = new Intl.NumberFormat('es-AR', {
@@ -14,10 +15,21 @@ interface CanchaCardProps {
   horarios?: Franja[]
   onEdit: (cancha: Cancha) => void
   onDelete: (cancha: Cancha) => void
+  onPhotosChanged: () => Promise<void>
+  onError: (message: string) => void
 }
 
-const CanchaCard = ({ cancha, horarios, onEdit, onDelete }: CanchaCardProps) => (
+const CanchaCard = ({
+  cancha,
+  horarios,
+  onEdit,
+  onDelete,
+  onPhotosChanged,
+  onError,
+}: CanchaCardProps) => (
   <li className="flex flex-col gap-4 rounded-3xl bg-surface-container-lowest p-6 shadow-sm">
+    <CanchaPhotos cancha={cancha} onChanged={onPhotosChanged} onError={onError} />
+
     <div className="flex flex-col gap-1">
       <h3 className="font-display text-headline-md uppercase tracking-wide text-on-surface">
         {cancha.nombre}
