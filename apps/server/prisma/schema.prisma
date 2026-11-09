@@ -98,7 +98,19 @@ model Cancha {
   montoSena      Float
   turnos         Turno[]
   horarios       HorarioCancha[]
+  fotos          CanchaFoto[]
   convocatorias  Convocatoria[]
+}
+
+model CanchaFoto {
+  id        String   @id @default(uuid())
+  canchaId  String
+  cancha    Cancha   @relation(fields: [canchaId], references: [id], onDelete: Cascade)
+  publicId  String   @unique
+  url       String
+  createdAt DateTime @default(now())
+
+  @@index([canchaId, createdAt])
 }
 
 model HorarioCancha {

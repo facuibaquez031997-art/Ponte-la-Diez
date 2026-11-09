@@ -25,16 +25,19 @@ const makePrisma = () => {
       count: vi.fn(async (_args?: object) => 0),
       deleteMany: vi.fn(async (_args?: object) => ({ count: 0 })),
     },
+    canchaFoto: { findMany: vi.fn(async (_args?: object) => [] as unknown[]) },
     $transaction: vi.fn(),
   }
   prisma.$transaction.mockImplementation(async (run: (tx: unknown) => unknown) => run(prisma))
   return prisma
 }
 
-const makeService = (prisma = makePrisma()) => ({
-  prisma,
-  service: new CanchasService(prisma as never),
-})
+const makeService = (prisma = makePrisma()) => {
+  const fotos = { destroyAssets: vi.fn(async (_publicIds: string[]) => undefined) }
+  return { prisma, fotos, service: new CanchasService(prisma as never, fotos as never) }
+}
+
+const FOTOS_INCLUDE = { fotos: { orderBy: { createdAt: 'asc' }, select: { id: true, url: true } } }
 
 describe('CanchasService', () => {
   it('creates a court owned by the caller', async () => {
@@ -71,6 +74,21 @@ describe('CanchasService', () => {
     expect(prisma.cancha.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: {} }))
   })
 
+  it('sends the photos with every court, oldest first (the first one is the cover)', async () => {
+    const { service, prisma } = makeService()
+    await service.listMine('owner1')
+    await service.list({})
+    prisma.cancha.findUnique.mockResolvedValue({ id: 'c1', ownerId: 'owner1' })
+    await service.findOne('c1')
+    for (const call of prisma.cancha.findMany.mock.calls) {
+      expect(call[0]).toEqual(expect.objectContaining({ include: FOTOS_INCLUDE }))
+    }
+    expect(prisma.cancha.findUnique).toHaveBeenCalledWith({
+      where: { id: 'c1' },
+      include: FOTOS_INCLUDE,
+    })
+  })
+
   it('returns 404 for an unknown court', async () => {
     const { service } = makeService()
     await expect(service.findOne('nope')).rejects.toBeInstanceOf(NotFoundException)
@@ -101,6 +119,23 @@ describe('CanchasService', () => {
     await service.remove('owner1', 'c1')
     expect(prisma.turno.deleteMany).toHaveBeenCalledWith({ where: { canchaId: 'c1' } })
     expect(prisma.cancha.delete).toHaveBeenCalledWith({ where: { id: 'c1' } })
+  })
+
+  it('deletes the photo files of a court once the court is gone', async () => {
+    const { service, prisma, fotos } = makeService()
+    prisma.cancha.findUnique.mockResolvedValue({ id: 'c1', ownerId: 'owner1' })
+    prisma.canchaFoto.findMany.mockResolvedValue([{ publicId: 'p1' }, { publicId: 'p2' }])
+    await service.remove('owner1', 'c1')
+    expect(fotos.destroyAssets).toHaveBeenCalledWith(['p1', 'p2'])
+  })
+
+  it('keeps the photo files when the court cannot be deleted', async () => {
+    const { service, prisma, fotos } = makeService()
+    prisma.cancha.findUnique.mockResolvedValue({ id: 'c1', ownerId: 'owner1' })
+    prisma.canchaFoto.findMany.mockResolvedValue([{ publicId: 'p1' }])
+    prisma.turno.count.mockResolvedValue(1)
+    await expect(service.remove('owner1', 'c1')).rejects.toBeInstanceOf(ConflictException)
+    expect(fotos.destroyAssets).not.toHaveBeenCalled()
   })
 
   it('refuses to delete a court that has bookings', async () => {
