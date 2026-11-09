@@ -1,8 +1,28 @@
 import { api } from './api'
-import type { Cancha, CanchaFoto, CanchaInput, Franja, FotoUploadSignature } from '../types/canchas'
+import type {
+  Cancha,
+  CanchaFilters,
+  CanchaFoto,
+  CanchaInput,
+  Franja,
+  FotoUploadSignature,
+  TurnoLibre,
+} from '../types/canchas'
 
 export const canchasService = {
   listMine: () => api.get<Cancha[]>('/canchas/mine').then((r) => r.data),
+  list: (filters: CanchaFilters) =>
+    api
+      .get<Cancha[]>('/canchas', {
+        params: {
+          barrio: filters.barrio || undefined,
+          tipoSuperficie: filters.tipoSuperficie || undefined,
+          precioMax: filters.precioMax ? Number(filters.precioMax) : undefined,
+        },
+      })
+      .then((r) => r.data),
+  freeTurnos: (id: string, fecha: string) =>
+    api.get<TurnoLibre[]>(`/canchas/${id}/turnos`, { params: { fecha } }).then((r) => r.data),
   get: (id: string) => api.get<Cancha>(`/canchas/${id}`).then((r) => r.data),
   create: (input: CanchaInput) => api.post('/canchas', input).then(() => undefined),
   update: (id: string, input: CanchaInput) =>

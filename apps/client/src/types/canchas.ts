@@ -29,6 +29,19 @@ export interface Cancha {
   fotos: CanchaFoto[]
 }
 
+export interface TurnoLibre {
+  id: string
+  fechaHoraInicio: string
+  fechaHoraFin: string
+}
+
+// What the explore screen sends to the API; empty text means "no filter".
+export interface CanchaFilters {
+  barrio: string
+  tipoSuperficie: string
+  precioMax: string
+}
+
 export type CanchaInput = Omit<Cancha, 'id' | 'ownerId' | 'fotos'>
 
 // Day of the week as the API sends it: 0 = Sunday ... 6 = Saturday.

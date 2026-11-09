@@ -15,7 +15,7 @@ Estados: ⏳ Pendiente · ✅ Resuelto · ➖ Aceptado como está (anotar motivo
 | 7 | 1 - Stitch | Rotar la API key de Stitch, que quedó expuesta en texto plano en el chat (dos veces) | ✅ |
 | 8 | 1 - Base de datos | Borrar el usuario de prueba `test.client@example.com` de la base de desarrollo | ✅ |
 | 9 | 1 - Base de datos | Borrar también el usuario de prueba `claude.test@example.com` de la base de desarrollo | ✅ |
-| 10 | 2 - Canchas | Reemplazar los datos de ejemplo de "Explorar canchas" (`exploreSampleData.ts`) por la API real de canchas, turnos y convocatorias | ⏳ |
+| 10 | 2 - Canchas | En "Explorar canchas" las canchas y turnos ya vienen de la API; siguen siendo datos de ejemplo (`exploreSampleData.ts`) los bloques "Partidos abiertos" y "Próxima fecha confirmada": conectarlos a las convocatorias y a las reservas reales (Fase 3) o quitarlos antes de publicar | ⏳ |
 | 11 | 2 - Canchas | El texto "Reserva protegida" (seña en custodia, cancelación gratuita hasta 4 h) viene del diseño de Stitch: definir la política real o quitarlo antes de publicar | ⏳ |
 | 12 | 4 - Falta Uno | Límite de frecuencia para enviar avisos de "falta un jugador" y opción para que cada jugador silencie avisos (evitar spam al barrio) | ⏳ |
 | 13 | 1 - Usuarios | Pasar `barrioPontevedra` de texto libre a una lista fija de barrios, para que coincidan los destinatarios de los avisos | ✅ |

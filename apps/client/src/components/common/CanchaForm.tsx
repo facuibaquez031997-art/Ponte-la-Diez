@@ -1,17 +1,12 @@
 import { useState, type FormEvent } from 'react'
 import { getAuthErrorMessage } from '../../pages/Auth/authError'
 import { SURFACES, type Cancha, type CanchaInput } from '../../types/canchas'
+import { MAX_MONEY, formatMoney, onlyDigits } from '../../utils/money'
 import BarrioCombobox from './BarrioCombobox'
 
 const FIELD_CLASS =
   'w-full rounded-xl bg-surface-container-low px-4 py-3 text-sm text-on-surface placeholder:text-on-surface-variant/60 transition-all focus:bg-surface-container-lowest focus:outline-none focus:ring-2 focus:ring-secondary-container'
 const LABEL_CLASS = 'text-label-sm uppercase tracking-wider text-on-surface'
-
-// Money is typed as text and kept as digits: a number input reads "20.000" as 20 in Spanish
-// locales, because the dot is a decimal separator there.
-const MAX_MONEY = 1_000_000
-const onlyDigits = (text: string) => text.replace(/\D/g, '').slice(0, 7)
-const formatMoney = (digits: string) => (digits ? Number(digits).toLocaleString('es-AR') : '')
 
 interface CanchaFormProps {
   cancha?: Cancha
