@@ -30,6 +30,9 @@ const TEST_EMAILS = [
   ...fromStamps('t6', ['c', 'a', 'b', 'd', 'f', 'e'], [1794099785371]),
   ...fromStamps('t8', ['u1', 'u2', 'u3', 'u4'], [1794102346117, 1794102293426]),
   ...fromStamps('t12', ['a', 'b', 'c', 'o'], [1794103586549, 1794103644308]),
+  'tmp-t1-owner-1-1794248686412@example.com',
+  'tmp-t1-owner-2-1794248686412@example.com',
+  'tmp-t1-player-1-1794248686412@example.com',
 ]
 
 const databaseUrl = process.env.DATABASE_URL ?? ''
