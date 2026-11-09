@@ -92,6 +92,7 @@ model Cancha {
   owner          User           @relation("OwnerCanchas", fields: [ownerId], references: [id])
   nombre         String
   direccion      String
+  barrio         String
   tipoSuperficie String
   precioHora     Float
   montoSena      Float
