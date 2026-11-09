@@ -120,6 +120,8 @@ model Turno {
   fechaHoraFin    DateTime
   estado          TurnoState @default(FREE)
   reserva         Reserva?
+
+  @@unique([canchaId, fechaHoraInicio])
 }
 
 model Reserva {

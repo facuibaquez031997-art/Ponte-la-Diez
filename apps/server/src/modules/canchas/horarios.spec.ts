@@ -91,14 +91,34 @@ const makePrisma = () => {
   return prisma
 }
 
+const turnos = { sync: vi.fn(async (_canchaId: string) => undefined) }
+
 describe('HorariosService', () => {
+  beforeEach(() => turnos.sync.mockClear())
+
+  it('regenerates the slots of the court after saving its schedule', async () => {
+    const prisma = makePrisma()
+    prisma.cancha.findUnique.mockResolvedValue({ id: 'c1', ownerId: 'o1' })
+    const service = new HorariosService(prisma as never, turnos as never)
+    await service.replace('o1', 'c1', [{ dia: 2, desde: '17:00', hasta: '20:00' }])
+    expect(turnos.sync).toHaveBeenCalledWith('c1')
+  })
+
+  it('does not regenerate anything when the change is refused', async () => {
+    const prisma = makePrisma()
+    prisma.cancha.findUnique.mockResolvedValue({ id: 'c1', ownerId: 'other' })
+    const service = new HorariosService(prisma as never, turnos as never)
+    await service.replace('o1', 'c1', []).catch(() => undefined)
+    expect(turnos.sync).not.toHaveBeenCalled()
+  })
+
   it('returns the schedule with readable times, ordered by day and start', async () => {
     const prisma = makePrisma()
     prisma.cancha.findUnique.mockResolvedValue({ id: 'c1', ownerId: 'o1' })
     prisma.horarioCancha.findMany.mockResolvedValue([
       { diaSemana: 1, minutoInicio: 900, minutoFin: 1440 },
     ])
-    const service = new HorariosService(prisma as never)
+    const service = new HorariosService(prisma as never, turnos as never)
     expect(await service.get('c1')).toEqual([{ dia: 1, desde: '15:00', hasta: '24:00' }])
     expect(prisma.horarioCancha.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -109,14 +129,14 @@ describe('HorariosService', () => {
   })
 
   it('404 when the court does not exist', async () => {
-    const service = new HorariosService(makePrisma() as never)
+    const service = new HorariosService(makePrisma() as never, turnos as never)
     await expect(service.get('nope')).rejects.toBeInstanceOf(NotFoundException)
   })
 
   it('replaces the whole schedule of my court in one transaction', async () => {
     const prisma = makePrisma()
     prisma.cancha.findUnique.mockResolvedValue({ id: 'c1', ownerId: 'o1' })
-    const service = new HorariosService(prisma as never)
+    const service = new HorariosService(prisma as never, turnos as never)
     await service.replace('o1', 'c1', [{ dia: 2, desde: '17:00', hasta: '20:00' }])
     expect(prisma.horarioCancha.deleteMany).toHaveBeenCalledWith({ where: { canchaId: 'c1' } })
     expect(prisma.horarioCancha.createMany).toHaveBeenCalledWith({
@@ -127,7 +147,7 @@ describe('HorariosService', () => {
   it('an empty schedule closes the court', async () => {
     const prisma = makePrisma()
     prisma.cancha.findUnique.mockResolvedValue({ id: 'c1', ownerId: 'o1' })
-    const service = new HorariosService(prisma as never)
+    const service = new HorariosService(prisma as never, turnos as never)
     await service.replace('o1', 'c1', [])
     expect(prisma.horarioCancha.deleteMany).toHaveBeenCalled()
     expect(prisma.horarioCancha.createMany).not.toHaveBeenCalled()
@@ -136,7 +156,7 @@ describe('HorariosService', () => {
   it("refuses to change another owner's schedule and keeps the old one", async () => {
     const prisma = makePrisma()
     prisma.cancha.findUnique.mockResolvedValue({ id: 'c1', ownerId: 'other' })
-    const service = new HorariosService(prisma as never)
+    const service = new HorariosService(prisma as never, turnos as never)
     await expect(
       service.replace('o1', 'c1', [{ dia: 2, desde: '17:00', hasta: '20:00' }])
     ).rejects.toBeInstanceOf(ForbiddenException)
@@ -146,7 +166,7 @@ describe('HorariosService', () => {
   it('does not touch the stored schedule when the ranges are invalid', async () => {
     const prisma = makePrisma()
     prisma.cancha.findUnique.mockResolvedValue({ id: 'c1', ownerId: 'o1' })
-    const service = new HorariosService(prisma as never)
+    const service = new HorariosService(prisma as never, turnos as never)
     await expect(
       service.replace('o1', 'c1', [{ dia: 2, desde: '20:00', hasta: '17:00' }])
     ).rejects.toBeInstanceOf(BadRequestException)

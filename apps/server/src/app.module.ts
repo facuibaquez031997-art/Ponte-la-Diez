@@ -10,6 +10,7 @@ import { CanchasModule } from './modules/canchas/canchas.module.js'
 import { ContactosModule } from './modules/contactos/contactos.module.js'
 import { ConvocatoriasModule } from './modules/convocatorias/convocatorias.module.js'
 import { NotificationsModule } from './modules/notifications/notifications.module.js'
+import { TurnosModule } from './modules/turnos/turnos.module.js'
 import { UsersModule } from './modules/users/users.module.js'
 
 @Module({
@@ -20,6 +21,7 @@ import { UsersModule } from './modules/users/users.module.js'
     AuthModule,
     UsersModule,
     CanchasModule,
+    TurnosModule,
     ContactosModule,
     ConvocatoriasModule,
     NotificationsModule,

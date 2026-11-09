@@ -1,10 +1,14 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
 import { PrismaService } from '../../common/prisma/prisma.service.js'
+import { TurnosService } from '../turnos/turnos.service.js'
 import { type FranjaInput, formatMinutes, normalizeFranjas } from './horarios.js'
 
 @Injectable()
 export class HorariosService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly turnos: TurnosService
+  ) {}
 
   async get(canchaId: string): Promise<FranjaInput[]> {
     await this.findCancha(canchaId)
@@ -30,6 +34,7 @@ export class HorariosService {
         await tx.horarioCancha.createMany({ data: rows.map((row) => ({ canchaId, ...row })) })
       }
     })
+    await this.turnos.sync(canchaId)
     return this.get(canchaId)
   }
 
