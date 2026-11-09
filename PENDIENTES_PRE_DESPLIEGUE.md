@@ -33,6 +33,8 @@ Estados: ⏳ Pendiente · ✅ Resuelto · ➖ Aceptado como está (anotar motivo
 | 25 | 4 - Contactos | Límite de frecuencia para enviar solicitudes de contacto (evitar que alguien las dispare en masa a emails que adivina o recolecta) y opción de bloquear a un jugador; hoy una solicitud rechazada se puede volver a enviar sin límite | ⏳ |
 | 26 | 4 - Contactos | La búsqueda por nombre muestra nombre, foto y barrio de cualquier jugador a cualquier jugador registrado: definir qué dato se comparte, agregar una opción de privacidad (por ejemplo "no aparecer en búsquedas") y combinarla con el límite de frecuencia del #25 antes de abrir el registro al público | ⏳ |
 | 27 | 4 - Contactos | Borrar los usuarios de prueba `t12.{a,b,c,o}.1794103586549@example.com` y `t12.{a,b,c,o}.1794103644308@example.com` (el `o` es un `OWNER`), y sus solicitudes y notificaciones, de la base de desarrollo | ✅ |
+| 28 | 2 - Turnos | La generación de turnos (`TurnosService.sync`) lee y después escribe sin ser atómica: si el dueño guarda una agenda nueva justo mientras un jugador consulta disponibilidad, puede quedar por un instante un turno libre que la agenda ya no incluye (converge en la siguiente consulta o guardado). Evaluar un bloqueo por cancha (advisory lock) cuando haya muchos usuarios | ⏳ |
+| 29 | 2 - Turnos | El filtro `fecha` de `GET /canchas/:id/turnos` acepta años menores a 0100 (por ejemplo `0050-01-01`) y devuelve lista vacía en vez de 400; es cosmético, pero conviene validar un rango de años razonable | ⏳ |
 
 ---
 
