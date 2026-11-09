@@ -14,6 +14,8 @@ const NAV_LINKS = [
   { label: 'Mensajes', to: '#' },
 ]
 
+const OWNER_LINK = { label: 'Mis canchas', to: '/dueno' }
+
 const ROLE_LABELS: Record<Role, string> = {
   PLAYER: 'Jugador',
   OWNER: 'Dueño',
@@ -45,15 +47,17 @@ const NavBar = () => {
           </Link>
 
           <nav aria-label="Principal" className="hidden items-center gap-6 lg:flex">
-            {NAV_LINKS.map(({ label, to }) => (
-              <Link
-                key={label}
-                to={to}
-                className="font-semibold text-on-primary-container transition-colors hover:text-on-primary"
-              >
-                {label}
-              </Link>
-            ))}
+            {(user?.rol === 'OWNER' ? [OWNER_LINK, ...NAV_LINKS] : NAV_LINKS).map(
+              ({ label, to }) => (
+                <Link
+                  key={label}
+                  to={to}
+                  className="font-semibold text-on-primary-container transition-colors hover:text-on-primary"
+                >
+                  {label}
+                </Link>
+              )
+            )}
           </nav>
         </div>
 
