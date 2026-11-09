@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import WeeklyScheduleEditor from '../../components/common/WeeklyScheduleEditor'
 import {
   countHours,
@@ -19,13 +19,13 @@ const serialize = (schedule: WeekSchedule) => JSON.stringify(toFranjas(schedule)
 const OwnerHorariosPage = () => {
   const { id } = useParams<{ id: string }>()
   const { user } = useAuth()
+  const navigate = useNavigate()
   const [cancha, setCancha] = useState<Cancha | null>(null)
   const [schedule, setSchedule] = useState<WeekSchedule>(emptySchedule)
   const [saved, setSaved] = useState(() => serialize(emptySchedule()))
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [notice, setNotice] = useState<string | null>(null)
 
   useEffect(() => {
     if (!id) return
@@ -57,29 +57,19 @@ const OwnerHorariosPage = () => {
   const invalid = scheduleError(schedule)
   const notMine = cancha !== null && user !== null && cancha.ownerId !== user.id
 
-  const handleChange = (next: WeekSchedule) => {
-    setNotice(null)
-    setSchedule(next)
-  }
-
   const handleSave = async () => {
     if (!id) return
     setSaving(true)
     setError(null)
-    setNotice(null)
     try {
       const franjas = await canchasService.saveHorarios(id, toFranjas(schedule))
-      const next = fromFranjas(franjas)
-      setSchedule(next)
-      setSaved(serialize(next))
-      setNotice(
+      const notice =
         franjas.length === 0
           ? 'Cerraste la cancha: no se ofrecen turnos en ningún día.'
-          : 'Guardamos tu agenda. Los turnos de los próximos 14 días ya están actualizados.'
-      )
+          : 'Guardamos tu agenda. Mirá abajo cómo quedaron los horarios de tu cancha.'
+      navigate('/dueno', { state: { notice } })
     } catch (err) {
       setError(getAuthErrorMessage(err))
-    } finally {
       setSaving(false)
     }
   }
@@ -116,14 +106,6 @@ const OwnerHorariosPage = () => {
           {error}
         </p>
       )}
-      {notice && (
-        <p
-          role="status"
-          className="rounded-xl bg-surface-container-low px-4 py-3 text-sm text-on-surface"
-        >
-          {notice}
-        </p>
-      )}
 
       {loading && <p className="text-sm text-on-surface-variant">Cargando la agenda...</p>}
 
@@ -138,7 +120,7 @@ const OwnerHorariosPage = () => {
 
       {cancha && !notMine && (
         <>
-          <WeeklyScheduleEditor value={schedule} onChange={handleChange} disabled={saving} />
+          <WeeklyScheduleEditor value={schedule} onChange={setSchedule} disabled={saving} />
 
           <div className="sticky bottom-0 flex flex-col gap-3 rounded-2xl bg-surface-container-lowest p-4 shadow-lg sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-on-surface-variant">

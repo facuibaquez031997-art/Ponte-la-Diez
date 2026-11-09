@@ -14,7 +14,8 @@ const NAV_LINKS = [
   { label: 'Mensajes', to: '#' },
 ]
 
-const OWNER_LINK = { label: 'Mis canchas', to: '/dueno' }
+// An owner only manages courts, slots and (later) payments: none of the player links apply.
+const OWNER_LINKS = [{ label: 'Mis canchas', to: '/dueno' }]
 
 const ROLE_LABELS: Record<Role, string> = {
   PLAYER: 'Jugador',
@@ -47,17 +48,15 @@ const NavBar = () => {
           </Link>
 
           <nav aria-label="Principal" className="hidden items-center gap-6 lg:flex">
-            {(user?.rol === 'OWNER' ? [OWNER_LINK, ...NAV_LINKS] : NAV_LINKS).map(
-              ({ label, to }) => (
-                <Link
-                  key={label}
-                  to={to}
-                  className="font-semibold text-on-primary-container transition-colors hover:text-on-primary"
-                >
-                  {label}
-                </Link>
-              )
-            )}
+            {(user?.rol === 'OWNER' ? OWNER_LINKS : NAV_LINKS).map(({ label, to }) => (
+              <Link
+                key={label}
+                to={to}
+                className="font-semibold text-on-primary-container transition-colors hover:text-on-primary"
+              >
+                {label}
+              </Link>
+            ))}
           </nav>
         </div>
 

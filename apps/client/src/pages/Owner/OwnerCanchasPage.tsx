@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import CanchaCard from '../../components/common/CanchaCard'
 import CanchaForm from '../../components/common/CanchaForm'
 import ConfirmDialog from '../../components/common/ConfirmDialog'
 import { canchasService } from '../../services/canchas.service'
-import type { Cancha, CanchaInput } from '../../types/canchas'
+import type { Cancha, CanchaInput, Franja } from '../../types/canchas'
 import { getAuthErrorMessage } from '../Auth/authError'
 
 type FormState = { kind: 'create' } | { kind: 'edit'; cancha: Cancha } | null
@@ -12,14 +13,26 @@ const OwnerCanchasPage = () => {
   const [canchas, setCanchas] = useState<Cancha[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [notice, setNotice] = useState<string | null>(null)
+  // The schedule page sends us back here with a message once it saved.
+  const location = useLocation()
+  const [notice, setNotice] = useState<string | null>(
+    (location.state as { notice?: string } | null)?.notice ?? null
+  )
+  const [horarios, setHorarios] = useState<Record<string, Franja[]>>({})
   const [form, setForm] = useState<FormState>(null)
   const [deleting, setDeleting] = useState<Cancha | null>(null)
 
   const load = useCallback(async () => {
     try {
-      setCanchas(await canchasService.listMine())
+      const mine = await canchasService.listMine()
+      setCanchas(mine)
       setError(null)
+      const schedules = await Promise.all(
+        mine.map(
+          async (cancha) => [cancha.id, await canchasService.getHorarios(cancha.id)] as const
+        )
+      )
+      setHorarios(Object.fromEntries(schedules))
     } catch (err) {
       setError(getAuthErrorMessage(err))
     } finally {
@@ -110,6 +123,7 @@ const OwnerCanchasPage = () => {
             <CanchaCard
               key={cancha.id}
               cancha={cancha}
+              horarios={horarios[cancha.id]}
               onEdit={(target) => startForm({ kind: 'edit', cancha: target })}
               onDelete={setDeleting}
             />

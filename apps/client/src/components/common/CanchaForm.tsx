@@ -7,6 +7,12 @@ const FIELD_CLASS =
   'w-full rounded-xl bg-surface-container-low px-4 py-3 text-sm text-on-surface placeholder:text-on-surface-variant/60 transition-all focus:bg-surface-container-lowest focus:outline-none focus:ring-2 focus:ring-secondary-container'
 const LABEL_CLASS = 'text-label-sm uppercase tracking-wider text-on-surface'
 
+// Money is typed as text and kept as digits: a number input reads "20.000" as 20 in Spanish
+// locales, because the dot is a decimal separator there.
+const MAX_MONEY = 1_000_000
+const onlyDigits = (text: string) => text.replace(/\D/g, '').slice(0, 7)
+const formatMoney = (digits: string) => (digits ? Number(digits).toLocaleString('es-AR') : '')
+
 interface CanchaFormProps {
   cancha?: Cancha
   onSubmit: (input: CanchaInput) => Promise<void>
@@ -47,8 +53,9 @@ const CanchaForm = ({ cancha, onSubmit, onCancel }: CanchaFormProps) => {
     direccion.trim().length >= 3 &&
     barrio !== '' &&
     Number(precioHora) > 0 &&
+    Number(precioHora) <= MAX_MONEY &&
     montoSena !== '' &&
-    Number(montoSena) >= 0
+    Number(montoSena) <= MAX_MONEY
 
   return (
     <form
@@ -119,13 +126,13 @@ const CanchaForm = ({ cancha, onSubmit, onCancel }: CanchaFormProps) => {
           </label>
           <input
             id="cancha-precio"
-            type="number"
+            type="text"
             inputMode="numeric"
-            min={1}
-            max={1_000_000}
+            autoComplete="off"
+            placeholder="Por ejemplo: 20.000"
             required
-            value={precioHora}
-            onChange={(e) => setPrecioHora(e.target.value)}
+            value={formatMoney(precioHora)}
+            onChange={(e) => setPrecioHora(onlyDigits(e.target.value))}
             className={FIELD_CLASS}
           />
         </div>
@@ -136,13 +143,13 @@ const CanchaForm = ({ cancha, onSubmit, onCancel }: CanchaFormProps) => {
           </label>
           <input
             id="cancha-sena"
-            type="number"
+            type="text"
             inputMode="numeric"
-            min={0}
-            max={1_000_000}
+            autoComplete="off"
+            placeholder="Por ejemplo: 5.000"
             required
-            value={montoSena}
-            onChange={(e) => setMontoSena(e.target.value)}
+            value={formatMoney(montoSena)}
+            onChange={(e) => setMontoSena(onlyDigits(e.target.value))}
             className={FIELD_CLASS}
           />
         </div>

@@ -79,3 +79,28 @@ export const countHours = (schedule: WeekSchedule): number =>
       total + schedule[dia].reduce((sum, range) => sum + (range.hasta - range.desde), 0),
     0
   )
+
+const rangeText = (range: HourRange) =>
+  `${startLabel(range.desde)} a ${range.hasta === 24 ? '00:00' : startLabel(range.hasta)}`
+
+export interface DaySummary {
+  dia: number
+  name: string
+  text: string
+}
+
+/** One line per day, Monday first, for showing a saved schedule at a glance. */
+export const summarizeWeek = (franjas: Franja[]): DaySummary[] => {
+  const schedule = fromFranjas(franjas)
+  return DAY_ORDER.map((dia) => ({
+    dia,
+    name: DAY_NAMES[dia],
+    text:
+      schedule[dia].length === 0
+        ? 'Cerrado'
+        : [...schedule[dia]]
+            .sort((a, b) => a.desde - b.desde)
+            .map(rangeText)
+            .join(' · '),
+  }))
+}
