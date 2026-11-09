@@ -33,6 +33,9 @@ const TEST_EMAILS = [
   'tmp-t1-owner-1-1794248686412@example.com',
   'tmp-t1-owner-2-1794248686412@example.com',
   'tmp-t1-player-1-1794248686412@example.com',
+  'tmp-t2-owner-1-1794249272913@example.com',
+  'tmp-t2-owner-2-1794249272913@example.com',
+  'tmp-t2-player-1-1794249272913@example.com',
 ]
 
 const databaseUrl = process.env.DATABASE_URL ?? ''

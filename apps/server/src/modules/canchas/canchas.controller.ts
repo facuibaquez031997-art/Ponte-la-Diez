@@ -8,6 +8,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Put,
   Query,
 } from '@nestjs/common'
 import type { Cancha } from '@prisma/client'
@@ -17,11 +18,17 @@ import { Roles } from '../auth/decorators/roles.decorator.js'
 import { CanchasService } from './canchas.service.js'
 import { CreateCanchaDto } from './dto/create-cancha.dto.js'
 import { ListCanchasQuery } from './dto/list-canchas.query.js'
+import { ReplaceHorariosDto } from './dto/replace-horarios.dto.js'
 import { UpdateCanchaDto } from './dto/update-cancha.dto.js'
+import type { FranjaInput } from './horarios.js'
+import { HorariosService } from './horarios.service.js'
 
 @Controller('canchas')
 export class CanchasController {
-  constructor(private readonly canchas: CanchasService) {}
+  constructor(
+    private readonly canchas: CanchasService,
+    private readonly horarios: HorariosService
+  ) {}
 
   @Post()
   @Roles('OWNER')
@@ -43,6 +50,21 @@ export class CanchasController {
   @Get(':id')
   findOne(@Param('id', ParseUUIDPipe) id: string): Promise<Cancha> {
     return this.canchas.findOne(id)
+  }
+
+  @Get(':id/horarios')
+  getHorarios(@Param('id', ParseUUIDPipe) id: string): Promise<FranjaInput[]> {
+    return this.horarios.get(id)
+  }
+
+  @Put(':id/horarios')
+  @Roles('OWNER')
+  replaceHorarios(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ReplaceHorariosDto
+  ): Promise<FranjaInput[]> {
+    return this.horarios.replace(user.id, id, dto.franjas)
   }
 
   @Patch(':id')
