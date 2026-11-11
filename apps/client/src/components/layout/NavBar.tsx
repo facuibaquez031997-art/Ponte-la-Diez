@@ -1,11 +1,15 @@
-import { Link } from 'react-router-dom'
+import { useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import logo from '../../assets/logo.png'
+import ConfirmDialog from '../common/ConfirmDialog'
 import { useAuth } from '../../hooks/useAuth'
 import type { Role } from '../../types/auth'
+import NotificationBell from './NotificationBell'
 
 const NAV_LINKS = [
   { label: 'Explorar canchas', to: '/canchas' },
-  { label: 'Falta uno', to: '#' },
+  { label: 'Falta uno', to: '/convocatorias' },
+  { label: 'Contactos', to: '/contactos' },
   { label: 'Mis reservas', to: '#' },
   { label: 'Mensajes', to: '#' },
 ]
@@ -17,6 +21,14 @@ const ROLE_LABELS: Record<Role, string> = {
 
 const NavBar = () => {
   const { user, logout } = useAuth()
+  const navigate = useNavigate()
+  const [confirmingLogout, setConfirmingLogout] = useState(false)
+
+  const handleLogout = () => {
+    setConfirmingLogout(false)
+    logout()
+    navigate('/login', { replace: true })
+  }
 
   return (
     <header className="sticky top-0 z-50 bg-primary-container shadow-[0_4px_20px_rgba(8,29,47,0.35)]">
@@ -48,14 +60,23 @@ const NavBar = () => {
         <div className="flex items-center gap-3">
           {user ? (
             <>
-              <div className="flex items-center gap-2 rounded-full bg-surface-tint/25 py-1 pl-2 pr-4">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-black">
-                  <span
-                    aria-hidden="true"
-                    className="material-symbols-outlined text-[18px] text-on-primary"
-                  >
-                    person
-                  </span>
+              <NotificationBell />
+              <Link
+                to="/perfil"
+                aria-label="Mi perfil"
+                className="flex items-center gap-2 rounded-full bg-surface-tint/25 py-1 pl-2 pr-4 transition-all hover:bg-surface-tint/40"
+              >
+                <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-black">
+                  {user.avatarUrl ? (
+                    <img src={user.avatarUrl} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <span
+                      aria-hidden="true"
+                      className="material-symbols-outlined text-[18px] text-on-primary"
+                    >
+                      person
+                    </span>
+                  )}
                 </div>
                 <div className="hidden flex-col text-left sm:flex">
                   <span className="text-xs font-semibold leading-tight text-on-primary">
@@ -65,14 +86,22 @@ const NavBar = () => {
                     {ROLE_LABELS[user.rol]}
                   </span>
                 </div>
-              </div>
+              </Link>
               <button
                 type="button"
-                onClick={logout}
+                onClick={() => setConfirmingLogout(true)}
                 className="rounded-full px-4 py-2 text-sm font-semibold text-on-primary-container transition-all hover:bg-surface-tint/20 hover:text-on-primary active:scale-[0.98]"
               >
                 Salir
               </button>
+              <ConfirmDialog
+                open={confirmingLogout}
+                title="Cerrar sesión"
+                message="¿Estás seguro de salir?"
+                confirmLabel="Sí, salir"
+                onConfirm={handleLogout}
+                onCancel={() => setConfirmingLogout(false)}
+              />
             </>
           ) : (
             <>

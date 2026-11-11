@@ -12,6 +12,29 @@ enum Role {
   OWNER
 }
 
+enum Posicion {
+  ARQUERO
+  DEFENSOR
+  MEDIOCAMPISTA
+  DELANTERO
+  TODOS
+}
+
+enum Alcance {
+  BARRIO
+  CONTACTOS
+}
+
+enum RespuestaEstado {
+  ACEPTADA
+  DECLINADA
+}
+
+enum ContactoEstado {
+  PENDIENTE
+  ACEPTADO
+}
+
 enum TurnoState {
   FREE
   RESERVED
@@ -31,18 +54,36 @@ enum PaymentState {
 }
 
 model User {
-  id               String             @id @default(uuid())
-  nombre           String
-  email            String             @unique
-  passwordHash     String
-  rol              Role               @default(PLAYER)
-  telefono         String?
-  barrioPontevedra String?
-  createdAt        DateTime           @default(now())
-  canchas          Cancha[]           @relation("OwnerCanchas")
-  reservas         Reserva[]
-  convocatorias    Convocatoria[]
-  subscriptions    PushSubscription[]
+  id                 String                  @id @default(uuid())
+  nombre             String
+  email              String                  @unique
+  passwordHash       String
+  rol                Role                    @default(PLAYER)
+  telefono           String?
+  barrioPontevedra   String?
+  avatarUrl          String?
+  createdAt          DateTime                @default(now())
+  canchas            Cancha[]                @relation("OwnerCanchas")
+  reservas           Reserva[]
+  convocatorias      Convocatoria[]
+  subscriptions      PushSubscription[]
+  notificaciones     Notificacion[]
+  respuestas         RespuestaConvocatoria[]
+  contactosEnviados  Contacto[]              @relation("ContactosEnviados")
+  contactosRecibidos Contacto[]              @relation("ContactosRecibidos")
+}
+
+model Contacto {
+  id             String         @id @default(uuid())
+  solicitanteId  String
+  solicitante    User           @relation("ContactosEnviados", fields: [solicitanteId], references: [id])
+  destinatarioId String
+  destinatario   User           @relation("ContactosRecibidos", fields: [destinatarioId], references: [id])
+  estado         ContactoEstado @default(PENDIENTE)
+  createdAt      DateTime       @default(now())
+
+  @@unique([solicitanteId, destinatarioId])
+  @@index([destinatarioId, estado])
 }
 
 model Cancha {
@@ -90,21 +131,54 @@ model Pago {
 }
 
 model Convocatoria {
-  id                 String   @id @default(uuid())
+  id                 String                  @id @default(uuid())
   creadorId          String
-  creador            User     @relation(fields: [creadorId], references: [id])
+  creador            User                    @relation(fields: [creadorId], references: [id])
   canchaId           String?
-  cancha             Cancha?  @relation(fields: [canchaId], references: [id])
+  cancha             Cancha?                 @relation(fields: [canchaId], references: [id])
+  canchaNombre       String?
   fechaHora          DateTime
   jugadoresFaltantes Int
-  estado             String   @default("ABIERTA")
+  posicion           Posicion
+  mensaje            String?
+  alcance            Alcance                 @default(BARRIO)
+  estado             String                  @default("ABIERTA")
+  notificaciones     Notificacion[]
+  respuestas         RespuestaConvocatoria[]
+}
+
+model RespuestaConvocatoria {
+  id             String          @id @default(uuid())
+  convocatoriaId String
+  convocatoria   Convocatoria    @relation(fields: [convocatoriaId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User            @relation(fields: [userId], references: [id])
+  estado         RespuestaEstado
+  createdAt      DateTime        @default(now())
+
+  @@unique([convocatoriaId, userId])
 }
 
 model PushSubscription {
-  id        String @id @default(uuid())
+  id        String   @id @default(uuid())
   userId    String
-  user      User   @relation(fields: [userId], references: [id])
-  endpoint  String
+  user      User     @relation(fields: [userId], references: [id])
+  endpoint  String   @unique
   keysP256  String
   keysAuth  String
+  createdAt DateTime @default(now())
+}
+
+model Notificacion {
+  id             String        @id @default(uuid())
+  userId         String
+  user           User          @relation(fields: [userId], references: [id])
+  convocatoriaId String?
+  convocatoria   Convocatoria? @relation(fields: [convocatoriaId], references: [id], onDelete: SetNull)
+  titulo         String
+  cuerpo         String
+  leida          Boolean       @default(false)
+  createdAt      DateTime      @default(now())
+
+  @@index([userId, leida])
 }

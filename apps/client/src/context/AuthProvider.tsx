@@ -1,7 +1,15 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { TOKEN_KEY } from '../services/api'
+import { uploadAvatarToCloudinary } from '../services/avatar.service'
 import { authService } from '../services/auth.service'
-import type { AuthResponse, LoginPayload, RegisterPayload, UserProfile } from '../types/auth'
+import { usersService } from '../services/users.service'
+import type {
+  AuthResponse,
+  LoginPayload,
+  RegisterPayload,
+  UpdateProfilePayload,
+  UserProfile,
+} from '../types/auth'
 import { AuthContext, type AuthContextValue } from './AuthContext'
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
@@ -33,14 +41,48 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     [startSession]
   )
 
+  const updateProfile = useCallback(
+    (payload: UpdateProfilePayload) =>
+      usersService.updateProfile(payload).then((updated) => {
+        setUser(updated)
+        return updated
+      }),
+    []
+  )
+
+  const uploadAvatar = useCallback(async (file: File) => {
+    await uploadAvatarToCloudinary(file)
+    const updated = await usersService.confirmAvatar()
+    setUser(updated)
+    return updated
+  }, [])
+
+  const removeAvatar = useCallback(
+    () =>
+      usersService.removeAvatar().then((updated) => {
+        setUser(updated)
+        return updated
+      }),
+    []
+  )
+
   const logout = useCallback(() => {
     localStorage.removeItem(TOKEN_KEY)
     setUser(null)
   }, [])
 
   const value = useMemo<AuthContextValue>(
-    () => ({ user, loading, login, register, logout }),
-    [user, loading, login, register, logout]
+    () => ({
+      user,
+      loading,
+      login,
+      register,
+      updateProfile,
+      uploadAvatar,
+      removeAvatar,
+      logout,
+    }),
+    [user, loading, login, register, updateProfile, uploadAvatar, removeAvatar, logout]
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

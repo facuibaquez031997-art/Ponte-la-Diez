@@ -41,6 +41,30 @@ export class EnvironmentVariables {
   @IsOptional()
   @IsBooleanString()
   GENTLE_AI_ENABLED?: string
+
+  @IsOptional()
+  @IsString()
+  CLOUDINARY_CLOUD_NAME?: string
+
+  @IsOptional()
+  @IsString()
+  CLOUDINARY_API_KEY?: string
+
+  @IsOptional()
+  @IsString()
+  CLOUDINARY_API_SECRET?: string
+
+  @IsOptional()
+  @IsString()
+  VAPID_PUBLIC_KEY?: string
+
+  @IsOptional()
+  @IsString()
+  VAPID_PRIVATE_KEY?: string
+
+  @IsOptional()
+  @IsString()
+  VAPID_SUBJECT?: string
 }
 
 export function validateEnv(raw: Record<string, unknown>): EnvironmentVariables {

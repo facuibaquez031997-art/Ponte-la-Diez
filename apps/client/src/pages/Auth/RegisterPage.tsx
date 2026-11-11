@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import AuthLayout from '../../components/common/AuthLayout'
+import BarrioCombobox from '../../components/common/BarrioCombobox'
 import FormField from '../../components/common/FormField'
 import { useAuth } from '../../hooks/useAuth'
 import type { Role } from '../../types/auth'
@@ -124,13 +125,11 @@ const RegisterPage = () => {
           value={telefono}
           onChange={(e) => setTelefono(e.target.value)}
         />
-        <FormField
+        <BarrioCombobox
           id="barrio"
           label="Barrio de Pontevedra (opcional)"
-          icon="location_on"
-          maxLength={80}
           value={barrioPontevedra}
-          onChange={(e) => setBarrioPontevedra(e.target.value)}
+          onChange={setBarrioPontevedra}
         />
 
         {error && (

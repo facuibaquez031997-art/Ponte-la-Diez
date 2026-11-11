@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt'
 import type { User } from '@prisma/client'
 import bcrypt from 'bcrypt'
 import { PrismaService } from '../../common/prisma/prisma.service.js'
+import { toUserProfile } from '../users/user-profile.mapper.js'
 import type { JwtPayload } from './auth.types.js'
 import type { AuthResponseDto, UserProfileDto } from './dto/auth-response.dto.js'
 import type { LoginDto } from './dto/login.dto.js'
@@ -56,13 +57,6 @@ export class AuthService {
   }
 
   private toProfile(user: User): UserProfileDto {
-    return {
-      id: user.id,
-      nombre: user.nombre,
-      email: user.email,
-      rol: user.rol,
-      telefono: user.telefono,
-      barrioPontevedra: user.barrioPontevedra,
-    }
+    return toUserProfile(user)
   }
 }
