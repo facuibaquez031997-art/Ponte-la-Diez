@@ -1,24 +1,3 @@
-export type SlotStatus = 'FREE' | 'BUSY'
-
-export interface TimeSlot {
-  time: string
-  status: SlotStatus
-}
-
-export interface Venue {
-  id: string
-  name: string
-  highlight: string
-  format: string
-  surface: string
-  rating: number
-  reviews: number
-  address: string
-  distance: string
-  pricePerHour: number
-  slots: TimeSlot[]
-}
-
 export type MatchLevel = 'Recreativo' | 'Intermedio' | 'Competitivo'
 
 export interface OpenMatch {

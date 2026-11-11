@@ -1,25 +1,7 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
-
-const FORMATS = [
-  { value: 'f5', label: 'Fútbol 5 (sintético)' },
-  { value: 'f7', label: 'Fútbol 7 (césped natural)' },
-  { value: 'f9', label: 'Fútbol 9 (mixto)' },
-  { value: 'f11', label: 'Fútbol 11 (oficial)' },
-]
-
-const ZONES = [
-  { value: 'pv-centro', label: 'Pontevedra (centro)' },
-  { value: 'pv-oeste', label: 'Pontevedra (Ruta 21)' },
-  { value: 'merlo', label: 'Merlo Sur' },
-  { value: 'padua', label: 'San Antonio de Padua' },
-]
-
-const QUICK_FILTERS = [
-  'Techada',
-  'Con quincho y parrilla',
-  'Estacionamiento propio',
-  'Vestuarios con ducha',
-]
+import BarrioCombobox from '../common/BarrioCombobox'
+import { SURFACES, type CanchaFilters } from '../../types/canchas'
+import { formatMoney, onlyDigits } from '../../utils/money'
 
 const controlClass =
   'h-12 w-full rounded-xl bg-surface-container-low px-4 text-base font-semibold text-on-surface focus:outline-none focus:ring-2 focus:ring-secondary-container'
@@ -46,32 +28,51 @@ const Field = ({ id, label, icon, children }: FieldProps) => (
   </div>
 )
 
-const ExploreSearch = () => {
-  const [activeFilters, setActiveFilters] = useState<string[]>([])
+interface ExploreSearchProps {
+  filters: CanchaFilters
+  fecha: string
+  // First and last day a slot can exist (the API generates a rolling window).
+  minFecha: string
+  maxFecha: string
+  onApply: (filters: CanchaFilters, fecha: string) => void
+}
 
-  const toggleFilter = (filter: string) =>
-    setActiveFilters((current) =>
-      current.includes(filter) ? current.filter((item) => item !== filter) : [...current, filter]
-    )
+const ExploreSearch = ({ filters, fecha, minFecha, maxFecha, onApply }: ExploreSearchProps) => {
+  const [draft, setDraft] = useState(filters)
+  const [draftFecha, setDraftFecha] = useState(fecha)
 
-  const handleSubmit = (e: FormEvent) => e.preventDefault()
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault()
+    onApply(draft, draftFecha)
+  }
 
   return (
     <div className="w-full rounded-xl bg-surface-container-lowest p-4 shadow-xl md:p-6">
       <form
         onSubmit={handleSubmit}
-        className="grid grid-cols-1 items-end gap-4 sm:grid-cols-2 lg:grid-cols-4"
+        className="grid grid-cols-1 items-end gap-4 sm:grid-cols-2 lg:grid-cols-5"
       >
-        <Field id="format" label="Formato" icon="sports_soccer">
+        <BarrioCombobox
+          id="filter-barrio"
+          label="Ubicación"
+          value={draft.barrio}
+          onChange={(barrio) => setDraft((current) => ({ ...current, barrio }))}
+        />
+
+        <Field id="filter-surface" label="Superficie" icon="sports_soccer">
           <div className="relative">
             <select
-              id="format"
-              defaultValue="f7"
+              id="filter-surface"
+              value={draft.tipoSuperficie}
+              onChange={(e) =>
+                setDraft((current) => ({ ...current, tipoSuperficie: e.target.value }))
+              }
               className={`${controlClass} cursor-pointer appearance-none`}
             >
-              {FORMATS.map(({ value, label }) => (
-                <option key={value} value={value}>
-                  {label}
+              <option value="">Todas</option>
+              {SURFACES.map((surface) => (
+                <option key={surface} value={surface}>
+                  {surface}
                 </option>
               ))}
             </select>
@@ -84,33 +85,30 @@ const ExploreSearch = () => {
           </div>
         </Field>
 
-        <Field id="zone" label="Ubicación" icon="location_on">
-          <div className="relative">
-            <select
-              id="zone"
-              defaultValue="pv-centro"
-              className={`${controlClass} cursor-pointer appearance-none`}
-            >
-              {ZONES.map(({ value, label }) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-            <span
-              aria-hidden="true"
-              className="material-symbols-outlined pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[20px] text-on-surface-variant"
-            >
-              expand_more
-            </span>
-          </div>
-        </Field>
-
-        <Field id="date" label="Fecha del partido" icon="calendar_today">
+        <Field id="filter-price" label="Precio máximo por hora" icon="payments">
           <input
-            id="date"
+            id="filter-price"
+            type="text"
+            inputMode="numeric"
+            autoComplete="off"
+            placeholder="Sin tope"
+            value={formatMoney(draft.precioMax)}
+            onChange={(e) =>
+              setDraft((current) => ({ ...current, precioMax: onlyDigits(e.target.value) }))
+            }
+            className={controlClass}
+          />
+        </Field>
+
+        <Field id="filter-date" label="Fecha del partido" icon="calendar_today">
+          <input
+            id="filter-date"
             type="date"
-            defaultValue={new Date().toLocaleDateString('en-CA')}
+            min={minFecha}
+            max={maxFecha}
+            required
+            value={draftFecha}
+            onChange={(e) => setDraftFecha(e.target.value)}
             className={`${controlClass} cursor-pointer`}
           />
         </Field>
@@ -125,28 +123,6 @@ const ExploreSearch = () => {
           Buscar canchas
         </button>
       </form>
-
-      <div className="mt-4 flex flex-wrap items-center gap-2 pt-2">
-        <span className="text-label-sm uppercase text-on-surface-variant">Filtros rápidos:</span>
-        {QUICK_FILTERS.map((filter) => {
-          const active = activeFilters.includes(filter)
-          return (
-            <button
-              key={filter}
-              type="button"
-              aria-pressed={active}
-              onClick={() => toggleFilter(filter)}
-              className={`rounded-full px-4 py-1 font-display text-eyebrow-badge uppercase transition-colors ${
-                active
-                  ? 'bg-primary-container text-secondary-container'
-                  : 'bg-surface-container-high text-on-surface hover:bg-surface-dim'
-              }`}
-            >
-              {filter}
-            </button>
-          )
-        })}
-      </div>
     </div>
   )
 }

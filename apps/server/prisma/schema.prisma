@@ -92,11 +92,36 @@ model Cancha {
   owner          User           @relation("OwnerCanchas", fields: [ownerId], references: [id])
   nombre         String
   direccion      String
+  barrio         String
   tipoSuperficie String
   precioHora     Float
   montoSena      Float
   turnos         Turno[]
+  horarios       HorarioCancha[]
+  fotos          CanchaFoto[]
   convocatorias  Convocatoria[]
+}
+
+model CanchaFoto {
+  id        String   @id @default(uuid())
+  canchaId  String
+  cancha    Cancha   @relation(fields: [canchaId], references: [id], onDelete: Cascade)
+  publicId  String   @unique
+  url       String
+  createdAt DateTime @default(now())
+
+  @@index([canchaId, createdAt])
+}
+
+model HorarioCancha {
+  id           String @id @default(uuid())
+  canchaId     String
+  cancha       Cancha @relation(fields: [canchaId], references: [id], onDelete: Cascade)
+  diaSemana    Int
+  minutoInicio Int
+  minutoFin    Int
+
+  @@index([canchaId, diaSemana])
 }
 
 model Turno {
@@ -107,6 +132,8 @@ model Turno {
   fechaHoraFin    DateTime
   estado          TurnoState @default(FREE)
   reserva         Reserva?
+
+  @@unique([canchaId, fechaHoraInicio])
 }
 
 model Reserva {

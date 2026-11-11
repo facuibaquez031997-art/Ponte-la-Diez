@@ -15,7 +15,7 @@ Estados: ⏳ Pendiente · ✅ Resuelto · ➖ Aceptado como está (anotar motivo
 | 7 | 1 - Stitch | Rotar la API key de Stitch, que quedó expuesta en texto plano en el chat (dos veces) | ✅ |
 | 8 | 1 - Base de datos | Borrar el usuario de prueba `test.client@example.com` de la base de desarrollo | ✅ |
 | 9 | 1 - Base de datos | Borrar también el usuario de prueba `claude.test@example.com` de la base de desarrollo | ✅ |
-| 10 | 2 - Canchas | Reemplazar los datos de ejemplo de "Explorar canchas" (`exploreSampleData.ts`) por la API real de canchas, turnos y convocatorias | ⏳ |
+| 10 | 2 - Canchas | En "Explorar canchas" las canchas y turnos ya vienen de la API; siguen siendo datos de ejemplo (`exploreSampleData.ts`) los bloques "Partidos abiertos" y "Próxima fecha confirmada": conectarlos a las convocatorias y a las reservas reales (Fase 3) o quitarlos antes de publicar | ⏳ |
 | 11 | 2 - Canchas | El texto "Reserva protegida" (seña en custodia, cancelación gratuita hasta 4 h) viene del diseño de Stitch: definir la política real o quitarlo antes de publicar | ⏳ |
 | 12 | 4 - Falta Uno | Límite de frecuencia para enviar avisos de "falta un jugador" y opción para que cada jugador silencie avisos (evitar spam al barrio) | ⏳ |
 | 13 | 1 - Usuarios | Pasar `barrioPontevedra` de texto libre a una lista fija de barrios, para que coincidan los destinatarios de los avisos | ✅ |
@@ -33,6 +33,8 @@ Estados: ⏳ Pendiente · ✅ Resuelto · ➖ Aceptado como está (anotar motivo
 | 25 | 4 - Contactos | Límite de frecuencia para enviar solicitudes de contacto (evitar que alguien las dispare en masa a emails que adivina o recolecta) y opción de bloquear a un jugador; hoy una solicitud rechazada se puede volver a enviar sin límite | ⏳ |
 | 26 | 4 - Contactos | La búsqueda por nombre muestra nombre, foto y barrio de cualquier jugador a cualquier jugador registrado: definir qué dato se comparte, agregar una opción de privacidad (por ejemplo "no aparecer en búsquedas") y combinarla con el límite de frecuencia del #25 antes de abrir el registro al público | ⏳ |
 | 27 | 4 - Contactos | Borrar los usuarios de prueba `t12.{a,b,c,o}.1794103586549@example.com` y `t12.{a,b,c,o}.1794103644308@example.com` (el `o` es un `OWNER`), y sus solicitudes y notificaciones, de la base de desarrollo | ✅ |
+| 28 | 2 - Turnos | La generación de turnos (`TurnosService.sync`) lee y después escribe sin ser atómica: si el dueño guarda una agenda nueva justo mientras un jugador consulta disponibilidad, puede quedar por un instante un turno libre que la agenda ya no incluye (converge en la siguiente consulta o guardado). Evaluar un bloqueo por cancha (advisory lock) cuando haya muchos usuarios | ⏳ |
+| 29 | 2 - Turnos | El filtro `fecha` de `GET /canchas/:id/turnos` acepta años menores a 0100 (por ejemplo `0050-01-01`) y devuelve lista vacía en vez de 400; es cosmético, pero conviene validar un rango de años razonable | ⏳ |
 
 ---
 

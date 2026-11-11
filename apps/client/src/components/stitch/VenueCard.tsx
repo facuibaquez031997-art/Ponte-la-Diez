@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import type { Venue } from '../../types/cancha'
+import type { Cancha, TurnoLibre } from '../../types/canchas'
+import { formatSlotTime } from '../../utils/dates'
 
 const priceFormat = new Intl.NumberFormat('es-AR', {
   style: 'currency',
@@ -8,70 +9,71 @@ const priceFormat = new Intl.NumberFormat('es-AR', {
 })
 
 interface VenueCardProps {
-  venue: Venue
-  onReserve?: (venue: Venue, time: string) => void
+  cancha: Cancha
+  // Free slots of the chosen day.
+  slots: TurnoLibre[]
 }
 
-const VenueCard = ({ venue, onReserve }: VenueCardProps) => {
-  const [selectedTime, setSelectedTime] = useState<string | null>(null)
-  const [favorite, setFavorite] = useState(false)
-  const freeCount = venue.slots.filter((slot) => slot.status === 'FREE').length
+const VenueCard = ({ cancha, slots }: VenueCardProps) => {
+  const [photoIndex, setPhotoIndex] = useState(0)
+  const { fotos } = cancha
+  const current = fotos[photoIndex] ?? fotos[0]
 
   return (
     <article className="group flex flex-col overflow-hidden rounded-xl bg-surface-container-lowest shadow-md">
       <div className="relative h-56 w-full overflow-hidden bg-gradient-to-br from-primary-container via-on-primary-fixed-variant to-secondary">
-        <span
-          aria-hidden="true"
-          className="material-symbols-outlined absolute -right-6 -top-6 text-[180px] text-white/10 transition-transform duration-500 group-hover:scale-105"
-        >
-          sports_soccer
-        </span>
-        <div className="absolute inset-0 bg-gradient-to-t from-primary-container/80 via-transparent to-black/20" />
-
-        <span className="absolute left-3 top-3 rounded-full bg-primary-container px-2 py-1 font-display text-eyebrow-badge uppercase text-secondary-container">
-          {venue.format} • {venue.surface}
-        </span>
-        <button
-          type="button"
-          onClick={() => setFavorite((value) => !value)}
-          aria-pressed={favorite}
-          aria-label="Guardar en favoritos"
-          className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-surface-container-lowest/80 text-on-surface backdrop-blur-sm transition-colors hover:text-error"
-        >
+        {current ? (
+          <img
+            src={current.url}
+            alt={`Foto de ${cancha.nombre}`}
+            className="h-full w-full object-cover"
+          />
+        ) : (
           <span
             aria-hidden="true"
-            className="material-symbols-outlined text-[20px]"
-            style={{ fontVariationSettings: `'FILL' ${favorite ? 1 : 0}` }}
+            className="material-symbols-outlined absolute -right-6 -top-6 text-[180px] text-white/10"
           >
-            favorite
+            sports_soccer
           </span>
-        </button>
+        )}
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-primary-container/80 via-transparent to-black/20" />
 
-        <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between text-on-primary">
-          <div>
-            <span className="font-display text-eyebrow-badge uppercase text-secondary-container">
-              {venue.highlight}
-            </span>
-            <h3 className="font-display text-headline-sm uppercase leading-none text-on-primary">
-              {venue.name}
-            </h3>
-          </div>
-          <div className="flex items-center gap-1 rounded-full bg-surface-container-lowest/90 px-2 py-1 text-on-surface">
-            <span
-              aria-hidden="true"
-              className="material-symbols-outlined text-[16px] text-secondary-container"
-              style={{ fontVariationSettings: "'FILL' 1" }}
-            >
-              star
-            </span>
-            <span className="text-xs font-bold">{venue.rating.toFixed(1)}</span>
-            <span className="text-xs text-on-surface-variant">({venue.reviews})</span>
-          </div>
+        <span className="absolute left-3 top-3 rounded-full bg-primary-container px-2 py-1 font-display text-eyebrow-badge uppercase text-secondary-container">
+          {cancha.tipoSuperficie}
+        </span>
+
+        <div className="absolute bottom-3 left-3 right-3 text-on-primary">
+          <span className="font-display text-eyebrow-badge uppercase text-secondary-container">
+            {cancha.barrio}
+          </span>
+          <h3 className="font-display text-headline-sm uppercase leading-none text-on-primary">
+            {cancha.nombre}
+          </h3>
         </div>
       </div>
 
+      {fotos.length > 1 && (
+        <ul className="flex gap-2 px-6 pt-4" aria-label={`Fotos de ${cancha.nombre}`}>
+          {fotos.map((foto, index) => (
+            <li key={foto.id}>
+              <button
+                type="button"
+                onClick={() => setPhotoIndex(index)}
+                aria-label={`Ver la foto ${index + 1}`}
+                aria-pressed={foto === current}
+                className={`h-12 w-16 overflow-hidden rounded-lg ring-2 transition-all ${
+                  foto === current ? 'ring-secondary-container' : 'ring-transparent opacity-70'
+                }`}
+              >
+                <img src={foto.url} alt="" className="h-full w-full object-cover" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
       <div className="flex flex-grow flex-col justify-between gap-4 p-6">
-        <div className="flex items-center justify-between gap-3 text-xs text-on-surface-variant">
+        <div className="flex items-start justify-between gap-3 text-xs text-on-surface-variant">
           <div className="flex items-center gap-1">
             <span
               aria-hidden="true"
@@ -79,74 +81,48 @@ const VenueCard = ({ venue, onReserve }: VenueCardProps) => {
             >
               near_me
             </span>
-            <span>
-              {venue.distance} • {venue.address}
-            </span>
+            <span>{cancha.direccion}</span>
           </div>
-          <span className="shrink-0 text-title-md font-bold text-on-surface">
-            {priceFormat.format(venue.pricePerHour)}{' '}
-            <span className="text-xs font-normal text-on-surface-variant">/h</span>
-          </span>
+          <div className="shrink-0 text-right">
+            <span className="text-title-md font-bold text-on-surface">
+              {priceFormat.format(cancha.precioHora)}{' '}
+              <span className="text-xs font-normal text-on-surface-variant">/h</span>
+            </span>
+            <p className="text-xs text-on-surface-variant">
+              Seña {priceFormat.format(cancha.montoSena)}
+            </p>
+          </div>
         </div>
 
         <div>
           <div className="mb-1 flex items-center justify-between">
             <span className="text-label-sm uppercase text-on-surface-variant">
-              Turnos disponibles hoy
+              Turnos disponibles
             </span>
-            <span className="text-label-sm font-semibold text-secondary">{freeCount} libres</span>
+            <span className="text-label-sm font-semibold text-secondary">
+              {slots.length} {slots.length === 1 ? 'libre' : 'libres'}
+            </span>
           </div>
-          <div className="grid grid-cols-3 gap-1">
-            {venue.slots.map(({ time, status }) => {
-              const busy = status === 'BUSY'
-              const selected = selectedTime === time
-              return (
-                <button
-                  key={time}
-                  type="button"
-                  disabled={busy}
-                  aria-pressed={selected}
-                  onClick={() => setSelectedTime(selected ? null : time)}
-                  className={`flex h-11 flex-col items-center justify-center rounded-lg text-base font-bold transition-colors ${
-                    busy
-                      ? 'cursor-not-allowed bg-surface-container text-outline-variant line-through'
-                      : selected
-                        ? 'bg-primary-container text-secondary-container ring-2 ring-secondary-container'
-                        : 'bg-surface-container-low text-on-surface hover:bg-primary-container hover:text-secondary-container'
-                  }`}
+          {slots.length === 0 ? (
+            <p className="rounded-lg bg-surface-container-low p-3 text-sm text-on-surface-variant">
+              No hay turnos libres para ese día.
+            </p>
+          ) : (
+            <ul className="grid grid-cols-3 gap-1">
+              {slots.map((slot) => (
+                <li
+                  key={slot.id}
+                  className="flex h-11 flex-col items-center justify-center rounded-lg bg-surface-container-low text-base font-bold text-on-surface"
                 >
-                  <span>{time}</span>
-                  <span
-                    className={`text-[10px] uppercase leading-none no-underline ${
-                      busy
-                        ? 'font-normal text-outline-variant'
-                        : selected
-                          ? 'font-semibold text-secondary-container'
-                          : 'font-normal text-secondary'
-                    }`}
-                  >
-                    {busy ? 'Ocupado' : selected ? 'Seleccionado' : 'Libre'}
+                  <span>{formatSlotTime(slot.fechaHoraInicio)}</span>
+                  <span className="text-[10px] font-normal uppercase leading-none text-secondary">
+                    Libre
                   </span>
-                </button>
-              )
-            })}
-          </div>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
-
-        <button
-          type="button"
-          disabled={!selectedTime}
-          onClick={() => selectedTime && onReserve?.(venue, selectedTime)}
-          className="flex h-11 w-full items-center justify-center gap-1 rounded-xl bg-primary-container font-display text-headline-sm uppercase tracking-wider text-on-primary transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <span>Reservar turno</span>
-          <span
-            aria-hidden="true"
-            className="material-symbols-outlined text-[18px] text-secondary-container"
-          >
-            bolt
-          </span>
-        </button>
       </div>
     </article>
   )
