@@ -8,6 +8,7 @@ const dto = {
   direccion: 'Calle 1 123',
   barrio: 'Barrio El Mate',
   tipoSuperficie: 'Sintético',
+  jugadores: 7,
   precioHora: 12000,
   montoSena: 3000,
 }
@@ -67,6 +68,34 @@ describe('CanchasService', () => {
         },
       })
     )
+  })
+
+  it('filters the public list by the size of the court', async () => {
+    const { service, prisma } = makeService()
+    await service.list({ jugadores: 7 })
+    expect(prisma.cancha.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { jugadores: 7 } })
+    )
+  })
+
+  it('combines the size with the other filters', async () => {
+    const { service, prisma } = makeService()
+    await service.list({ barrio: 'Barrio El Sol', jugadores: 5, precioMax: 15000 })
+    expect(prisma.cancha.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { barrio: 'Barrio El Sol', jugadores: 5, precioHora: { lte: 15000 } },
+      })
+    )
+  })
+
+  it('lets the owner set the size of an existing court', async () => {
+    const { service, prisma } = makeService()
+    prisma.cancha.findUnique.mockResolvedValue({ id: 'c1', ownerId: 'owner1' })
+    await service.update('owner1', 'c1', { jugadores: 9 })
+    expect(prisma.cancha.update).toHaveBeenCalledWith({
+      where: { id: 'c1' },
+      data: { jugadores: 9 },
+    })
   })
 
   it('lists everything when no filter is given', async () => {

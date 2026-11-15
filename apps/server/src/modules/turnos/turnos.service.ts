@@ -38,7 +38,7 @@ export interface AgendaTurno {
 }
 
 export interface AgendaCancha {
-  cancha: { id: string; nombre: string; tipoSuperficie: string }
+  cancha: { id: string; nombre: string; tipoSuperficie: string; jugadores: number | null }
   turnos: AgendaTurno[]
 }
 
@@ -105,7 +105,7 @@ export class TurnosService {
     await releaseExpiredHolds(this.prisma, now, { ownerId })
     const canchas = await this.prisma.cancha.findMany({
       where: { ownerId },
-      select: { id: true, nombre: true, tipoSuperficie: true },
+      select: { id: true, nombre: true, tipoSuperficie: true, jugadores: true },
       orderBy: { nombre: 'asc' },
     })
     await Promise.all(canchas.map((cancha) => this.sync(cancha.id, now)))

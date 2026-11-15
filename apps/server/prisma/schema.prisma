@@ -97,6 +97,8 @@ model Cancha {
   direccion      String
   barrio         String
   tipoSuperficie String
+  // Players per side: 5, 7, 9 or 11. Courts created before it existed have none until the owner sets it.
+  jugadores      Int?
   precioHora     Float
   montoSena      Float
   turnos         Turno[]

@@ -5,8 +5,8 @@ import { TurnosService } from './turnos.service.js'
 
 const now = new Date('2026-11-09T15:00:00.000Z') // Mon 12:00 local
 const canchas = [
-  { id: 'c1', nombre: 'El Mate', tipoSuperficie: 'Sintético' },
-  { id: 'c2', nombre: 'La Bombonera', tipoSuperficie: 'Cemento' },
+  { id: 'c1', nombre: 'El Mate', tipoSuperficie: 'Sintético', jugadores: 5 },
+  { id: 'c2', nombre: 'La Bombonera', tipoSuperficie: 'Cemento', jugadores: null },
 ]
 
 const turno = (
@@ -183,6 +183,22 @@ describe('TurnosService.agenda', () => {
     expect(view.canchas[0].turnos[0].reserva?.jugador).toEqual({ nombre: 'Ana', avatarUrl: null })
     expect(JSON.stringify(view)).not.toContain('ana@mail.com')
     expect(JSON.stringify(view)).not.toContain('1155')
+  })
+
+  it('brings the size of every court, and none for a court that has not set it yet', async () => {
+    const { prisma, service } = makeService()
+
+    const view = await service.agenda('o1', '2026-11-10', now)
+
+    expect(view.canchas.map((c) => [c.cancha.nombre, c.cancha.jugadores])).toEqual([
+      ['El Mate', 5],
+      ['La Bombonera', null],
+    ])
+    expect(prisma.cancha.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: { id: true, nombre: true, tipoSuperficie: true, jugadores: true },
+      })
+    )
   })
 
   it('answers with an empty list when the owner has no courts, without reading slots', async () => {

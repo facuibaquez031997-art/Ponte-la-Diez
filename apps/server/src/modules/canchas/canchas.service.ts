@@ -41,6 +41,7 @@ export class CanchasService {
     const where: Prisma.CanchaWhereInput = {}
     if (filters.barrio) where.barrio = filters.barrio
     if (filters.tipoSuperficie) where.tipoSuperficie = filters.tipoSuperficie
+    if (filters.jugadores !== undefined) where.jugadores = filters.jugadores
     if (filters.precioMax !== undefined) where.precioHora = { lte: filters.precioMax }
     return this.prisma.cancha.findMany({
       where,
