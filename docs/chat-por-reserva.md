@@ -27,13 +27,17 @@ Una reserva sin pagar se **borra a los 15 minutos** (decisión A2 de los pagos).
 ```prisma
 model Conversacion {
   id              String    @id @default(uuid())
-  reservaId       String?   @unique          // se anula si la reserva se libera
+  reservaId       String?   @unique          // opcional: nace sin reserva o se anula si la reserva se libera
   reserva         Reserva?  @relation(fields: [reservaId], references: [id], onDelete: SetNull)
   canchaId        String                      // para la bandeja del dueño
-  jugadorId       String
-  turnoInicio     DateTime                    // copia para el banner
+  cancha          Cancha    @relation(fields: [canchaId], references: [id])
+  jugadorId       String                      // siempre quien inició la conversación
+  jugador         User      @relation(fields: [jugadorId], references: [id])
+  turnoInicio     DateTime?                   // copia para el banner, solo si hay reserva
   jugadorLeyoHasta DateTime?                  // para contar no leídos
   duenoLeyoHasta   DateTime?
+  jugadorEliminoAt DateTime?                  // el jugador eliminó el chat de su bandeja
+  duenoEliminoAt   DateTime?                  // el dueño eliminó el chat de su bandeja
   ultimoMensajeAt  DateTime?
   mensajes        Mensaje[]
 }
@@ -82,9 +86,17 @@ Acciones rápidas de Stitch (enviar comprobante, pedir ubicación, avisar que ll
 
 ## Decisiones que faltan antes de construir
 
-1. **¿Se puede escribir antes de reservar?** Con este diseño, el hilo nace de una reserva (aunque sea pendiente). Si querés consultar sin tomar un turno, hay que sumar un botón "Consultar al dueño" en la tarjeta de la cancha, con una conversación sin reserva.
-2. **¿Puede el dueño iniciar la conversación** en una reserva pendiente? Recomendado: sí.
-3. **¿Cuánto se guardan los mensajes?** Recomendado: mientras exista la cancha.
+**Decididas por el programador:**
+
+1. **Se puede escribir antes de reservar.** Botón "Consultar al dueño" en la tarjeta de la cancha, con una conversación sin reserva.
+2. **Solo el jugador inicia la conversación.** El dueño nunca la inicia: responde en las que el jugador abrió.
+3. **Eliminar el chat es individual.** Quien lo elimina lo oculta solo de su bandeja (se guarda `jugadorEliminoAt` o `duenoEliminoAt`); el otro participante conserva el hilo intacto.
+
+4. **Si el otro escribe en un chat que eliminaste, reaparece solo con los mensajes posteriores a la eliminación** (`createdAt > eliminoAt`). Si nunca lo eliminaste, ves todo el historial. El chat está oculto mientras `ultimoMensajeAt <= eliminoAt`.
+
+5. **Los mensajes se guardan mientras exista la cancha.** Si la cancha se borra, sus hilos se borran con ella; si tiene reservas con plata pagada, la cancha se conserva en el historial (commit `95f4a37`) y sus hilos también.
+
+**Faltan:** ninguna decisión de producto. Queda definir en la construcción el límite de frecuencia (mensajes por minuto) y la moderación (pendiente #33).
 
 ## Qué se verifica cuando se construya
 
