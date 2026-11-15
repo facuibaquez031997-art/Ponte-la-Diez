@@ -61,10 +61,19 @@ const makeGateway = () => ({
   })),
 })
 
-const build = (prisma = makePrisma(), gateway = makeGateway()) => ({
+const makeNotifications = () => ({
+  notifyBookingConfirmed: vi.fn(async (_reservaId?: string) => undefined),
+})
+
+const build = (
+  prisma = makePrisma(),
+  gateway = makeGateway(),
+  notifications = makeNotifications()
+) => ({
   prisma,
   gateway,
-  service: new PagosService(prisma as never, gateway as never),
+  notifications,
+  service: new PagosService(prisma as never, gateway as never, notifications as never),
 })
 
 describe('PagosService.createPreference', () => {
@@ -283,5 +292,39 @@ describe('PagosService.handleWebhook', () => {
       result: 'ignored',
     })
     expect(gateway.getPayment).not.toHaveBeenCalled()
+  })
+})
+
+describe('PagosService notifies the owner of the confirmed booking', () => {
+  it('notifies once, with the booking id, when the payment confirms the booking', async () => {
+    const { service, notifications } = build()
+    expect(await service.handlePaymentNotification('123456')).toBe('confirmed')
+    expect(notifications.notifyBookingConfirmed).toHaveBeenCalledTimes(1)
+    expect(notifications.notifyBookingConfirmed).toHaveBeenCalledWith('r1')
+  })
+
+  it('does not notify again when the same approval arrives twice', async () => {
+    const { service, prisma, notifications } = build()
+    prisma.reserva.findUnique.mockResolvedValue(
+      reserva({ estado: 'CONFIRMED', pago: { id: 'p1', estadoPago: 'APPROVED', monto: 5000 } })
+    )
+    expect(await service.handlePaymentNotification('123456')).toBe('duplicate')
+    expect(notifications.notifyBookingConfirmed).not.toHaveBeenCalled()
+  })
+
+  it('does not notify when nothing was confirmed', async () => {
+    const { service, prisma, gateway, notifications } = build()
+    gateway.getPayment.mockResolvedValue(payment({ status: 'rejected' }))
+    expect(await service.handlePaymentNotification('123456')).toBe('ignored')
+    prisma.reserva.updateMany.mockResolvedValue({ count: 0 })
+    gateway.getPayment.mockResolvedValue(payment())
+    expect(await service.handlePaymentNotification('123456')).toBe('ignored')
+    expect(notifications.notifyBookingConfirmed).not.toHaveBeenCalled()
+  })
+
+  it('still answers confirmed when the notification itself fails', async () => {
+    const { service, notifications } = build()
+    notifications.notifyBookingConfirmed.mockRejectedValue(new Error('push down'))
+    expect(await service.handlePaymentNotification('123456')).toBe('confirmed')
   })
 })

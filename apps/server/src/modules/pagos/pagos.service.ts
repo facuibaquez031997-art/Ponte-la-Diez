@@ -7,7 +7,9 @@ import {
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common'
+import { formatSlotLabel } from '../../common/format.js'
 import { PrismaService } from '../../common/prisma/prisma.service.js'
+import { NotificationsService } from '../notifications/notifications.service.js'
 import { HOLD_MS, releaseExpiredHolds } from '../reservas/holds.js'
 import { MercadoPagoGateway, type PreferenceResult } from './mercadopago.gateway.js'
 import { verifyWebhookSignature } from './webhook-signature.js'
@@ -21,19 +23,14 @@ export interface WebhookRequest {
   type?: string
 }
 
-const dateFormat = new Intl.DateTimeFormat('es-AR', {
-  timeZone: 'America/Argentina/Buenos_Aires',
-  dateStyle: 'short',
-  timeStyle: 'short',
-})
-
 @Injectable()
 export class PagosService {
   private readonly logger = new Logger(PagosService.name)
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly gateway: MercadoPagoGateway
+    private readonly gateway: MercadoPagoGateway,
+    private readonly notifications: NotificationsService
   ) {}
 
   async createPreference(
@@ -65,7 +62,7 @@ export class PagosService {
     try {
       preference = await this.gateway.createPreference({
         reservaId: reserva.id,
-        title: `Reserva ${reserva.turno.cancha.nombre} - ${dateFormat.format(reserva.turno.fechaHoraInicio)}`,
+        title: `Reserva ${reserva.turno.cancha.nombre} - ${formatSlotLabel(reserva.turno.fechaHoraInicio)}`,
         monto: reserva.pago.monto,
         expiresAt,
       })
@@ -149,6 +146,17 @@ export class PagosService {
       )
       return 'ignored'
     }
+    await this.notifyOwner(reserva.id)
     return 'confirmed'
+  }
+
+  // A failed notification must never fail the webhook: Mercado Pago would retry a payment that
+  // is already confirmed.
+  private async notifyOwner(reservaId: string): Promise<void> {
+    try {
+      await this.notifications.notifyBookingConfirmed(reservaId)
+    } catch (error) {
+      this.logger.error(`Could not notify the owner of booking ${reservaId}`, error)
+    }
   }
 }

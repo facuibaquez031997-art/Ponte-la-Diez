@@ -6,6 +6,7 @@ import type {
   PushSubscription,
   RespuestaEstado,
 } from '@prisma/client'
+import { formatPesos, formatSlotLabel } from '../../common/format.js'
 import { PrismaService } from '../../common/prisma/prisma.service.js'
 import { acceptedContactIds } from '../contactos/contact-ids.js'
 import type { SubscribePushDto } from './dto/subscribe-push.dto.js'
@@ -14,6 +15,7 @@ import { PushService } from './push.service.js'
 const INBOX_PAGE_SIZE = 50
 const CONVOCATORIAS_URL = '/convocatorias'
 const CONTACTOS_URL = '/contactos'
+const OWNER_RESERVAS_URL = '/dueno/reservas'
 
 const POSICION_LABEL: Record<Posicion, string> = {
   ARQUERO: 'arquero',
@@ -140,6 +142,36 @@ export class NotificationsService {
       data: [{ userId: contacto.solicitanteId, titulo, cuerpo }],
     })
     await this.sendPush(contacto.solicitante.subscriptions, titulo, cuerpo, CONTACTOS_URL)
+  }
+
+  /** Tells the owner of the court that a booking was paid and is now confirmed. */
+  async notifyBookingConfirmed(reservaId: string): Promise<void> {
+    const reserva = await this.prisma.reserva.findUnique({
+      where: { id: reservaId },
+      include: {
+        user: true,
+        pago: true,
+        turno: {
+          include: { cancha: { include: { owner: { include: { subscriptions: true } } } } },
+        },
+      },
+    })
+    if (!reserva || reserva.pago?.estadoPago !== 'APPROVED') return
+
+    const { cancha } = reserva.turno
+    const left = Math.max(reserva.montoTotal - reserva.pago.monto, 0)
+    const paid =
+      left === 0
+        ? 'Pagó el total.'
+        : `Pagó la seña de ${formatPesos(reserva.pago.monto)}; quedan ${formatPesos(left)} para cobrar en la cancha.`
+
+    const titulo = 'Reserva confirmada'
+    const cuerpo = `${reserva.user.nombre} reservó ${cancha.nombre} el ${formatSlotLabel(reserva.turno.fechaHoraInicio)}. ${paid}`
+
+    await this.prisma.notificacion.createMany({
+      data: [{ userId: cancha.ownerId, reservaId: reserva.id, titulo, cuerpo }],
+    })
+    await this.sendPush(cancha.owner.subscriptions, titulo, cuerpo, OWNER_RESERVAS_URL)
   }
 
   private async findAudience(convocatoria: {

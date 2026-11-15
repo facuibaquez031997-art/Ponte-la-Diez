@@ -87,9 +87,9 @@ model Contacto {
 }
 
 model Cancha {
-  id             String         @id @default(uuid())
+  id             String          @id @default(uuid())
   ownerId        String
-  owner          User           @relation("OwnerCanchas", fields: [ownerId], references: [id])
+  owner          User            @relation("OwnerCanchas", fields: [ownerId], references: [id])
   nombre         String
   direccion      String
   barrio         String
@@ -137,15 +137,16 @@ model Turno {
 }
 
 model Reserva {
-  id         String       @id @default(uuid())
-  turnoId    String       @unique
-  turno      Turno        @relation(fields: [turnoId], references: [id])
-  userId     String
-  user       User         @relation(fields: [userId], references: [id])
-  estado     ReservaState @default(PENDING)
-  montoTotal Float
-  createdAt  DateTime     @default(now())
-  pago       Pago?
+  id             String         @id @default(uuid())
+  turnoId        String         @unique
+  turno          Turno          @relation(fields: [turnoId], references: [id])
+  userId         String
+  user           User           @relation(fields: [userId], references: [id])
+  estado         ReservaState   @default(PENDING)
+  montoTotal     Float
+  createdAt      DateTime       @default(now())
+  pago           Pago?
+  notificaciones Notificacion[]
 }
 
 model Pago {
@@ -203,6 +204,8 @@ model Notificacion {
   user           User          @relation(fields: [userId], references: [id])
   convocatoriaId String?
   convocatoria   Convocatoria? @relation(fields: [convocatoriaId], references: [id], onDelete: SetNull)
+  reservaId      String?
+  reserva        Reserva?      @relation(fields: [reservaId], references: [id], onDelete: SetNull)
   titulo         String
   cuerpo         String
   leida          Boolean       @default(false)

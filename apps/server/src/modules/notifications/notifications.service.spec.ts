@@ -41,6 +41,7 @@ const makeDeps = () => {
       findUnique: vi.fn(async (_args?: object) => null as unknown),
       findMany: vi.fn(async (_args?: object) => [] as unknown[]),
     },
+    reserva: { findUnique: vi.fn(async (_args?: object) => null as unknown) },
     pushSubscription: {
       upsert: vi.fn(async (_args?: object) => ({})),
       deleteMany: vi.fn(async (_args?: object) => ({ count: 1 })),
@@ -436,5 +437,105 @@ describe('NotificationsService inbox', () => {
       where: { userId: 'u1', leida: false },
       data: { leida: true },
     })
+  })
+})
+
+describe('NotificationsService.notifyBookingConfirmed', () => {
+  const booking = (overrides: { pago?: object | null; montoTotal?: number } = {}) => ({
+    id: 'r1',
+    montoTotal: overrides.montoTotal ?? 20000,
+    user: { nombre: 'Ana' },
+    pago: overrides.pago === undefined ? { estadoPago: 'APPROVED', monto: 5000 } : overrides.pago,
+    turno: {
+      fechaHoraInicio: new Date('2026-11-15T20:00:00.000Z'),
+      cancha: {
+        nombre: 'El Mate',
+        ownerId: 'owner-1',
+        owner: { id: 'owner-1', subscriptions: [sub('e1'), sub('e2')] },
+      },
+    },
+  })
+
+  type OwnerCreated = {
+    data: Array<{ userId: string; reservaId: string; titulo: string; cuerpo: string }>
+  }
+
+  it("tells the court's owner, linked to the booking and not to any call", async () => {
+    const { prisma, service } = makeDeps()
+    prisma.reserva.findUnique.mockResolvedValue(booking())
+
+    await service.notifyBookingConfirmed('r1')
+
+    const { data } = prisma.notificacion.createMany.mock.calls[0][0] as OwnerCreated
+    expect(data).toHaveLength(1)
+    expect(data[0]).toMatchObject({
+      userId: 'owner-1',
+      reservaId: 'r1',
+      titulo: 'Reserva confirmada',
+    })
+    expect(data[0]).not.toHaveProperty('convocatoriaId')
+  })
+
+  it('says who booked, which court, when, what was paid and what is left at the court', async () => {
+    const { prisma, service } = makeDeps()
+    prisma.reserva.findUnique.mockResolvedValue(booking())
+
+    await service.notifyBookingConfirmed('r1')
+
+    const { data } = prisma.notificacion.createMany.mock.calls[0][0] as OwnerCreated
+    const cuerpo = data[0].cuerpo
+    expect(cuerpo).toContain('Ana')
+    expect(cuerpo).toContain('El Mate')
+    expect(cuerpo).toContain('17:00')
+    expect(cuerpo).toContain('5.000')
+    expect(cuerpo).toContain('15.000')
+    expect(cuerpo).toContain('cancha')
+  })
+
+  it('says it was paid in full when nothing is left to collect', async () => {
+    const { prisma, service } = makeDeps()
+    prisma.reserva.findUnique.mockResolvedValue(
+      booking({ pago: { estadoPago: 'APPROVED', monto: 20000 } })
+    )
+
+    await service.notifyBookingConfirmed('r1')
+
+    const { data } = prisma.notificacion.createMany.mock.calls[0][0] as OwnerCreated
+    expect(data[0].cuerpo).toContain('total')
+    expect(data[0].cuerpo).not.toContain('quedan')
+  })
+
+  it('sends the push to every device of the owner and opens the owner bookings page', async () => {
+    const { prisma, push, service } = makeDeps()
+    prisma.reserva.findUnique.mockResolvedValue(booking())
+
+    await service.notifyBookingConfirmed('r1')
+
+    expect(push.send).toHaveBeenCalledTimes(2)
+    expect(push.send).toHaveBeenCalledWith(
+      expect.objectContaining({ endpoint: 'e1' }),
+      expect.objectContaining({ title: 'Reserva confirmada', url: '/dueno/reservas' })
+    )
+  })
+
+  it('does nothing for a booking that does not exist', async () => {
+    const { prisma, push, service } = makeDeps()
+
+    await service.notifyBookingConfirmed('missing')
+
+    expect(prisma.notificacion.createMany).not.toHaveBeenCalled()
+    expect(push.send).not.toHaveBeenCalled()
+  })
+
+  it('does nothing for a booking whose payment is not approved', async () => {
+    const { prisma, push, service } = makeDeps()
+    prisma.reserva.findUnique.mockResolvedValue(
+      booking({ pago: { estadoPago: 'PENDING', monto: 5000 } })
+    )
+
+    await service.notifyBookingConfirmed('r1')
+
+    expect(prisma.notificacion.createMany).not.toHaveBeenCalled()
+    expect(push.send).not.toHaveBeenCalled()
   })
 })
