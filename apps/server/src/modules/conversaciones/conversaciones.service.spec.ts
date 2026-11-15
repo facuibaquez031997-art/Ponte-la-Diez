@@ -31,6 +31,7 @@ interface Msg {
   createdAt: Date
   ofertaTurnoId: string | null
   ofertaInicio: Date | null
+  ofertaCanchaId: string | null
 }
 interface Slot {
   canchaId: string
@@ -41,6 +42,17 @@ interface Reserva {
   estado: string
   montoTotal: number
   pago: { estadoPago: string; monto: number } | null
+}
+
+// Courts besides the one of the conversation (CANCHA, a 5): another one of the same owner and one
+// of somebody else.
+const COURTS: Record<
+  string,
+  { nombre: string; precioHora: number; jugadores: number; ownerId: string }
+> = {
+  [CANCHA]: { nombre: 'El Mate', precioHora: 20000, jugadores: 5, ownerId: OWNER },
+  'cancha-7': { nombre: 'La Grande', precioHora: 30000, jugadores: 7, ownerId: OWNER },
+  'otra-cancha': { nombre: 'Ajena', precioHora: 10000, jugadores: 11, ownerId: 'otro-dueno' },
 }
 
 const advance = (seconds: number) => vi.setSystemTime(new Date(Date.now() + seconds * 1000))
@@ -61,6 +73,7 @@ const makePrisma = (reservas: Record<string, Reserva> = {}) => {
       barrio: 'Barrio El Sol',
       precioHora: 20000,
       montoSena: 5000,
+      jugadores: 5,
       ownerId: OWNER,
       owner: { nombre: 'Dueño', avatarUrl: null },
     },
@@ -89,9 +102,18 @@ const makePrisma = (reservas: Record<string, Reserva> = {}) => {
       findUnique: vi.fn(async (args: { where: { id: string } }) =>
         args.where.id === CANCHA ? { id: CANCHA } : null
       ),
+      // The other courts of the owner that a slot can be offered from.
+      findMany: vi.fn(async (args: { where: { id: { in: string[] } } }) =>
+        args.where.id.in
+          .filter((id) => COURTS[id])
+          .map((id) => ({ id, ...COURTS[id], barrio: 'Barrio El Sol', montoSena: 5000 }))
+      ),
     },
     turno: {
-      findUnique: vi.fn(async (args: { where: { id: string } }) => turnos[args.where.id] ?? null),
+      findUnique: vi.fn(async (args: { where: { id: string } }) => {
+        const slot = turnos[args.where.id]
+        return slot ? { ...slot, cancha: { ownerId: COURTS[slot.canchaId]?.ownerId } } : null
+      }),
       findMany: vi.fn(async (args: { where: { id: { in: string[] }; estado: string } }) =>
         args.where.id.in
           .filter((id) => {
@@ -160,6 +182,7 @@ const makePrisma = (reservas: Record<string, Reserva> = {}) => {
             cuerpo: string
             ofertaTurnoId?: string
             ofertaInicio?: Date
+            ofertaCanchaId?: string
           }
         }) => {
           const msg: Msg = {
@@ -167,6 +190,7 @@ const makePrisma = (reservas: Record<string, Reserva> = {}) => {
             createdAt: new Date(),
             ofertaTurnoId: null,
             ofertaInicio: null,
+            ofertaCanchaId: null,
             ...args.data,
           }
           mensajes.push(msg)
@@ -569,6 +593,66 @@ describe('ConversacionesService', () => {
       const seen = await service.thread(PLAYER, id)
       expect(seen.mensajes.at(-1)?.oferta).toMatchObject({ turnoId: 't-free', disponible: true })
       expect(seen.mensajes[0]?.oferta).toBeNull()
+    })
+
+    it('shows the size of the court in the offer', async () => {
+      const { service } = setup()
+      const id = await openChat(service)
+      advance(5)
+
+      const sent = await service.send(OWNER, id, 'Tengo el sábado a las 17', 't-free')
+
+      expect(sent.oferta?.cancha).toMatchObject({ jugadores: 5 })
+    })
+
+    it('lets the owner answer an inquiry about a 5 with a slot of their court of 7', async () => {
+      const { prisma, service } = setup()
+      prisma.turnos['t-siete'] = {
+        canchaId: 'cancha-7',
+        estado: 'FREE',
+        fechaHoraInicio: TURNO,
+      }
+      const id = await openChat(service)
+      advance(5)
+
+      const sent = await service.send(OWNER, id, 'Para 7 tengo este', 't-siete')
+
+      expect(sent.oferta).toMatchObject({
+        turnoId: 't-siete',
+        disponible: true,
+        cancha: { id: 'cancha-7', nombre: 'La Grande', precioHora: 30000, jugadores: 7 },
+      })
+      // The player gets the court of the offer, not the one of the conversation.
+      const seen = (await service.thread(PLAYER, id)).mensajes.at(-1)?.oferta
+      expect(seen?.cancha).toMatchObject({ id: 'cancha-7', jugadores: 7 })
+    })
+
+    it('keeps each offer with its own court when the owner offers two courts', async () => {
+      const { prisma, service } = setup()
+      prisma.turnos['t-siete'] = {
+        canchaId: 'cancha-7',
+        estado: 'FREE',
+        fechaHoraInicio: TURNO,
+      }
+      const id = await openChat(service)
+      advance(5)
+      await service.send(OWNER, id, 'Para 5', 't-free')
+      advance(5)
+      await service.send(OWNER, id, 'Para 7', 't-siete')
+
+      const offers = (await service.thread(PLAYER, id)).mensajes.flatMap((m) => m.oferta ?? [])
+
+      expect(offers.map((o) => [o.cancha.id, o.cancha.jugadores])).toEqual([
+        [CANCHA, 5],
+        ['cancha-7', 7],
+      ])
+    })
+
+    it('shows the size of the court of the conversation in its header', async () => {
+      const { service } = setup()
+      const id = await openChat(service)
+
+      expect((await service.thread(PLAYER, id)).conversacion.cancha.jugadores).toBe(5)
     })
 
     it('does not let the player offer a slot', async () => {

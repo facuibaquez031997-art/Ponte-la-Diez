@@ -11,7 +11,7 @@ Branch: feat/tamano-cancha (from feat/chat-reservar-presencia, because the offer
 ## Tasks
 
 - [ ] T1 S1 S3 · inline · server: `Cancha.jugadores` + migration, DTOs (required on create, optional on update, filter on list), list filter, agenda answer, tests · commit: see git log "size of the court" (server suite 419 green, tsc clean)
-- [ ] T2 S4 · inline · server chat: `Mensaje.ofertaCanchaId` + migration, an owner may offer a slot of any of their courts, the offer view uses the offered court (with size), tests · commit: -
+- [ ] T2 S4 · inline · server chat: `Mensaje.ofertaCanchaId` + migration, an owner may offer a slot of any of their courts, the offer view uses the offered court (with size), tests · commit: see git log "offer a slot of any court" (server suite 423 green)
 - [ ] T3 S1 S2 S3 S4 · inline · client: form with required size, size on every card/dialog/agenda/offer/header, filter in "Explorar canchas", chat panel with all courts · commit: -
 - [ ] T4 · inline · live check against the real database, docs and pending list · commit: -
 

@@ -293,6 +293,8 @@ model Mensaje {
   // and regenerated with the weekly schedule and an offer must never block that.
   ofertaTurnoId  String?
   ofertaInicio   DateTime?
+  // Court of the offered slot: the owner may offer a slot of any of their courts.
+  ofertaCanchaId String?
   createdAt      DateTime     @default(now())
 
   @@index([conversacionId, createdAt])

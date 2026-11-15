@@ -31,6 +31,7 @@ const conversacionInclude = {
       barrio: true,
       precioHora: true,
       montoSena: true,
+      jugadores: true,
       ownerId: true,
       owner: { select: { nombre: true, avatarUrl: true } },
     },
@@ -61,6 +62,7 @@ type StoredConversacion = {
     barrio: string
     precioHora: number
     montoSena: number
+    jugadores: number | null
     ownerId: string
     owner: { nombre: string; avatarUrl: string | null }
   }
@@ -100,7 +102,7 @@ export interface ConversacionView {
   id: string
   /** The other person of the conversation. */
   otro: Participant
-  cancha: { id: string; nombre: string }
+  cancha: { id: string; nombre: string; jugadores: number | null }
   turno: TurnoBanner | null
   ultimoMensaje: { cuerpo: string; createdAt: Date; propio: boolean } | null
   noLeidos: number
@@ -114,8 +116,31 @@ export interface OfertaView {
   fechaHoraInicio: Date
   /** Still free and in the future. A booked, expired or deleted slot is not available anymore. */
   disponible: boolean
-  cancha: { id: string; nombre: string; barrio: string; precioHora: number; montoSena: number }
+  cancha: {
+    id: string
+    nombre: string
+    barrio: string
+    precioHora: number
+    montoSena: number
+    jugadores: number | null
+  }
 }
+
+const toOfertaCancha = (court: {
+  id: string
+  nombre: string
+  barrio: string
+  precioHora: number
+  montoSena: number
+  jugadores: number | null
+}): OfertaView['cancha'] => ({
+  id: court.id,
+  nombre: court.nombre,
+  barrio: court.barrio,
+  precioHora: court.precioHora,
+  montoSena: court.montoSena,
+  jugadores: court.jugadores,
+})
 
 export interface MensajeView {
   id: string
@@ -132,6 +157,7 @@ interface StoredMensaje {
   createdAt: Date
   ofertaTurnoId: string | null
   ofertaInicio: Date | null
+  ofertaCanchaId: string | null
 }
 
 export interface ThreadView {
@@ -247,7 +273,7 @@ export class ConversacionesService {
 
   /**
    * `ofertaTurnoId` attaches a slot to the message so the player can book it from the chat. Only
-   * the owner offers, and only a free, future slot of the court of this conversation.
+   * the owner offers, and only a free, future slot of any of their courts.
    */
   async send(
     userId: string,
@@ -266,7 +292,7 @@ export class ConversacionesService {
     }
 
     const oferta = ofertaTurnoId
-      ? await this.validateOffer(side, conversacion.cancha.id, ofertaTurnoId)
+      ? await this.validateOffer(side, conversacion.cancha.ownerId, ofertaTurnoId)
       : undefined
 
     const recent = await this.prisma.mensaje.count({
@@ -330,28 +356,39 @@ export class ConversacionesService {
 
   private async validateOffer(
     side: Side,
-    canchaId: string,
+    ownerId: string,
     turnoId: string
-  ): Promise<{ ofertaTurnoId: string; ofertaInicio: Date }> {
+  ): Promise<{ ofertaTurnoId: string; ofertaInicio: Date; ofertaCanchaId: string }> {
     if (side !== 'dueno') {
       throw new BadRequestException('Solo el dueño puede ofrecer un horario')
     }
     const now = new Date()
     // A booking nobody paid blocks its slot until released: free it before judging the slot.
-    await releaseExpiredHolds(this.prisma, now, { canchaId })
+    await releaseExpiredHolds(this.prisma, now, { ownerId })
     const turno = await this.prisma.turno.findUnique({
       where: { id: turnoId },
-      select: { canchaId: true, estado: true, fechaHoraInicio: true },
+      select: {
+        canchaId: true,
+        estado: true,
+        fechaHoraInicio: true,
+        cancha: { select: { ownerId: true } },
+      },
     })
+    // Any court of the owner can be offered (an inquiry about a 5 may be answered with a 7), but
+    // never the court of somebody else.
     if (
       !turno ||
-      turno.canchaId !== canchaId ||
+      turno.cancha.ownerId !== ownerId ||
       turno.estado !== 'FREE' ||
       turno.fechaHoraInicio <= now
     ) {
       throw new BadRequestException('Ese horario ya no está disponible')
     }
-    return { ofertaTurnoId: turnoId, ofertaInicio: turno.fechaHoraInicio }
+    return {
+      ofertaTurnoId: turnoId,
+      ofertaInicio: turno.fechaHoraInicio,
+      ofertaCanchaId: turno.canchaId,
+    }
   }
 
   /** Messages as the user sees them, with each offer checked against the slot as it is right now. */
@@ -363,15 +400,37 @@ export class ConversacionesService {
     const now = new Date()
     const offered = rows.filter(
       (row): row is StoredMensaje & { ofertaTurnoId: string; ofertaInicio: Date } =>
-        row.ofertaTurnoId !== null && row.ofertaInicio !== null && row.ofertaInicio > now
+        row.ofertaTurnoId !== null && row.ofertaInicio !== null
     )
 
+    // The courts the offers belong to. Offers made before the owner could offer other courts have
+    // no court of their own: they belong to the court of the conversation.
+    const courts = new Map<string, OfertaView['cancha']>([[cancha.id, toOfertaCancha(cancha)]])
+    const others = [
+      ...new Set(offered.map((row) => row.ofertaCanchaId).filter((id) => id && !courts.has(id))),
+    ] as string[]
+    if (others.length > 0) {
+      const found = await this.prisma.cancha.findMany({
+        where: { id: { in: others } },
+        select: {
+          id: true,
+          nombre: true,
+          barrio: true,
+          precioHora: true,
+          montoSena: true,
+          jugadores: true,
+        },
+      })
+      for (const court of found) courts.set(court.id, toOfertaCancha(court))
+    }
+
     let free = new Set<string>()
-    if (offered.length > 0) {
-      await releaseExpiredHolds(this.prisma, now, { canchaId: cancha.id })
+    const upcoming = offered.filter((row) => row.ofertaInicio > now)
+    if (upcoming.length > 0) {
+      await releaseExpiredHolds(this.prisma, now, { ownerId: cancha.ownerId })
       const turnos = await this.prisma.turno.findMany({
         where: {
-          id: { in: offered.map((row) => row.ofertaTurnoId) },
+          id: { in: upcoming.map((row) => row.ofertaTurnoId) },
           estado: 'FREE',
           fechaHoraInicio: { gt: now },
         },
@@ -380,27 +439,24 @@ export class ConversacionesService {
       free = new Set(turnos.map((turno) => turno.id))
     }
 
-    return rows.map((row) => ({
-      id: row.id,
-      cuerpo: row.cuerpo,
-      createdAt: row.createdAt,
-      propio: row.autorId === userId,
-      oferta:
-        row.ofertaTurnoId && row.ofertaInicio
-          ? {
-              turnoId: row.ofertaTurnoId,
-              fechaHoraInicio: row.ofertaInicio,
-              disponible: free.has(row.ofertaTurnoId),
-              cancha: {
-                id: cancha.id,
-                nombre: cancha.nombre,
-                barrio: cancha.barrio,
-                precioHora: cancha.precioHora,
-                montoSena: cancha.montoSena,
-              },
-            }
-          : null,
-    }))
+    return rows.map((row) => {
+      const court = courts.get(row.ofertaCanchaId ?? cancha.id)
+      return {
+        id: row.id,
+        cuerpo: row.cuerpo,
+        createdAt: row.createdAt,
+        propio: row.autorId === userId,
+        oferta:
+          row.ofertaTurnoId && row.ofertaInicio && court
+            ? {
+                turnoId: row.ofertaTurnoId,
+                fechaHoraInicio: row.ofertaInicio,
+                disponible: free.has(row.ofertaTurnoId),
+                cancha: court,
+              }
+            : null,
+      }
+    })
   }
 
   async markRead(userId: string, id: string): Promise<void> {
@@ -466,7 +522,11 @@ export class ConversacionesService {
         avatarUrl: otro.avatarUrl,
         conectado: this.presence.isOnline(this.otherId(conversacion, side)),
       },
-      cancha: { id: conversacion.cancha.id, nombre: conversacion.cancha.nombre },
+      cancha: {
+        id: conversacion.cancha.id,
+        nombre: conversacion.cancha.nombre,
+        jugadores: conversacion.cancha.jugadores,
+      },
       turno: this.banner(conversacion),
     }
   }
