@@ -71,6 +71,7 @@ model User {
   respuestas         RespuestaConvocatoria[]
   contactosEnviados  Contacto[]              @relation("ContactosEnviados")
   contactosRecibidos Contacto[]              @relation("ContactosRecibidos")
+  historialReservas  HistorialReserva[]
 }
 
 model Contacto {
@@ -87,9 +88,9 @@ model Contacto {
 }
 
 model Cancha {
-  id             String          @id @default(uuid())
+  id             String             @id @default(uuid())
   ownerId        String
-  owner          User            @relation("OwnerCanchas", fields: [ownerId], references: [id])
+  owner          User               @relation("OwnerCanchas", fields: [ownerId], references: [id])
   nombre         String
   direccion      String
   barrio         String
@@ -100,6 +101,7 @@ model Cancha {
   horarios       HorarioCancha[]
   fotos          CanchaFoto[]
   convocatorias  Convocatoria[]
+  historial      HistorialReserva[]
 }
 
 model CanchaFoto {
@@ -212,4 +214,38 @@ model Notificacion {
   createdAt      DateTime      @default(now())
 
   @@index([userId, leida])
+}
+
+enum MotivoCierre {
+  VENCIDA
+  CANCELADA_DUENO
+}
+
+enum EstadoDevolucion {
+  NO_CORRESPONDE
+  PENDIENTE
+  HECHA
+}
+
+// A booking that stopped existing (unpaid and expired, or cancelled by the owner). The booking
+// itself is deleted so its slot can be booked again (Reserva.turnoId is unique); this keeps what
+// the owner needs to follow earnings, attendance and refunds.
+model HistorialReserva {
+  id          String           @id @default(uuid())
+  canchaId    String
+  cancha      Cancha           @relation(fields: [canchaId], references: [id], onDelete: Cascade)
+  jugadorId   String
+  jugador     User             @relation(fields: [jugadorId], references: [id], onDelete: Cascade)
+  turnoInicio DateTime
+  turnoFin    DateTime
+  montoTotal  Float
+  montoPagado Float            @default(0)
+  mpPaymentId String?
+  motivo      MotivoCierre
+  devolucion  EstadoDevolucion
+  devueltoAt  DateTime?
+  reservadaAt DateTime
+  cerradaAt   DateTime         @default(now())
+
+  @@index([canchaId, cerradaAt])
 }

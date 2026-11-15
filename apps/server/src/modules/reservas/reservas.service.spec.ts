@@ -43,9 +43,10 @@ const makePrisma = () => {
         async (_args?: object) => stored({ estadoPago: 'PENDING', monto: 5000 }) as unknown
       ),
       findMany: vi.fn(async (_args?: object) => [] as unknown[]),
-      deleteMany: vi.fn(async (_args?: object) => ({ count: 0 })),
+      deleteMany: vi.fn(async (_args?: object) => ({ count: 1 })),
     },
     pago: { deleteMany: vi.fn(async (_args?: object) => ({ count: 0 })) },
+    historialReserva: { create: vi.fn(async (_args?: object) => ({})) },
     $transaction: vi.fn(async (arg: unknown) =>
       typeof arg === 'function'
         ? (arg as (tx: unknown) => unknown)(prisma)
@@ -144,7 +145,16 @@ describe('ReservasService.create', () => {
 
   it('frees expired holds of that court before claiming the slot', async () => {
     const prisma = makePrisma()
-    prisma.reserva.findMany.mockResolvedValue([{ id: 'old', turnoId: 't1' }])
+    prisma.reserva.findMany.mockResolvedValue([
+      {
+        id: 'old',
+        turnoId: 't1',
+        userId: 'u9',
+        montoTotal: 20000,
+        createdAt: new Date('2026-11-14T14:30:00.000Z'),
+        turno: { canchaId: 'c1', fechaHoraInicio: future, fechaHoraFin: future },
+      },
+    ])
     await new ReservasService(prisma as never).create(
       'u1',
       { turnoId: 't1', tipoPago: 'SENA' },

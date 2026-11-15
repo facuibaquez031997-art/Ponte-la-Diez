@@ -13,8 +13,10 @@ export interface HoldScope {
 /**
  * Releases the slots of PENDING bookings that were not paid within the hold time.
  * The booking is deleted (not cancelled) because `Reserva.turnoId` is unique and the
- * slot must be bookable again. A booking with an APPROVED payment is never removed.
- * Returns how many bookings were released. Safe to run any number of times.
+ * slot must be bookable again; a history record keeps what the owner needs to see.
+ * A booking with an APPROVED payment is never removed.
+ * Returns how many bookings were released. Safe to run any number of times, even at once:
+ * only the run that really deletes a booking records it and frees its slot.
  */
 export async function releaseExpiredHolds(
   prisma: PrismaService,
@@ -37,22 +39,49 @@ export async function releaseExpiredHolds(
           }
         : {}),
     },
-    select: { id: true, turnoId: true },
+    select: {
+      id: true,
+      turnoId: true,
+      userId: true,
+      montoTotal: true,
+      createdAt: true,
+      turno: { select: { canchaId: true, fechaHoraInicio: true, fechaHoraFin: true } },
+    },
   })
-  if (expired.length === 0) return 0
 
-  const reservaIds = expired.map((reserva) => reserva.id)
-  const turnoIds = expired.map((reserva) => reserva.turnoId)
-  await prisma.$transaction([
-    prisma.pago.deleteMany({
-      where: { reservaId: { in: reservaIds }, estadoPago: { not: 'APPROVED' } },
-    }),
-    prisma.reserva.deleteMany({ where: { id: { in: reservaIds }, estado: 'PENDING' } }),
-    prisma.turno.updateMany({
+  let released = 0
+  for (const reserva of expired) {
+    const done = await prisma.$transaction(async (tx) => {
+      await tx.pago.deleteMany({
+        where: { reservaId: reserva.id, estadoPago: { not: 'APPROVED' } },
+      })
+      const deleted = await tx.reserva.deleteMany({
+        where: { id: reserva.id, estado: 'PENDING' },
+      })
+      if (deleted.count === 0) return false
+
+      await tx.historialReserva.create({
+        data: {
+          canchaId: reserva.turno.canchaId,
+          jugadorId: reserva.userId,
+          turnoInicio: reserva.turno.fechaHoraInicio,
+          turnoFin: reserva.turno.fechaHoraFin,
+          montoTotal: reserva.montoTotal,
+          montoPagado: 0,
+          mpPaymentId: null,
+          motivo: 'VENCIDA',
+          devolucion: 'NO_CORRESPONDE',
+          reservadaAt: reserva.createdAt,
+        },
+      })
       // A booking confirmed meanwhile (webhook) is still attached to its slot: keep it RESERVED.
-      where: { id: { in: turnoIds }, estado: 'RESERVED', reserva: null },
-      data: { estado: 'FREE' },
-    }),
-  ])
-  return expired.length
+      await tx.turno.updateMany({
+        where: { id: reserva.turnoId, estado: 'RESERVED', reserva: null },
+        data: { estado: 'FREE' },
+      })
+      return true
+    })
+    if (done) released += 1
+  }
+  return released
 }
