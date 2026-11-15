@@ -48,13 +48,15 @@ const ConversacionItem = ({ conversacion, rol, active, onSelect }: ConversacionI
         <p className="mb-1 truncate text-xs text-on-surface-variant">
           {chatSubtitle(conversacion, rol)}
         </p>
-        {ultimoMensaje && (
+        {ultimoMensaje ? (
           <p
             className={`truncate text-xs ${unread ? 'font-semibold text-on-surface' : 'text-on-surface-variant'}`}
           >
             {ultimoMensaje.propio && <span className="font-medium text-on-surface">Vos: </span>}
             {ultimoMensaje.cuerpo}
           </p>
+        ) : (
+          <p className="truncate text-xs italic text-on-surface-variant">Chat vaciado</p>
         )}
       </div>
       {unread && (

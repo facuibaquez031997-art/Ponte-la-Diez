@@ -145,9 +145,13 @@ const makePrisma = (reservas: Record<string, Reserva> = {}) => {
             .slice(0, args.take)
       ),
       findFirst: vi.fn(
-        async (args: { where: { conversacionId: string } }) =>
+        async (args: { where: { conversacionId: string; createdAt?: Range } }) =>
           mensajes
-            .filter((m) => m.conversacionId === args.where.conversacionId)
+            .filter(
+              (m) =>
+                m.conversacionId === args.where.conversacionId &&
+                inRange(m.createdAt, args.where.createdAt)
+            )
             .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0] ?? null
       ),
       count: vi.fn(
@@ -316,31 +320,63 @@ describe('ConversacionesService', () => {
   })
 
   describe('deleting is individual', () => {
-    it('hides the chat only for whoever deleted it', async () => {
+    it('hides the chat from the inbox of the player who deleted it, not from the owner', async () => {
       const service = makeService()
       const id = await openChat(service)
       advance(5)
-      await service.remove(OWNER, id)
+      await service.remove(PLAYER, id)
 
-      expect(await service.list(OWNER)).toEqual([])
-      expect(await service.list(PLAYER)).toHaveLength(1)
-      expect((await service.thread(PLAYER, id)).mensajes).toHaveLength(1)
+      expect(await service.list(PLAYER)).toEqual([])
+      expect(await service.list(OWNER)).toHaveLength(1)
+      expect((await service.thread(OWNER, id)).mensajes).toHaveLength(1)
     })
 
-    it('brings the chat back with only the messages after the deletion', async () => {
+    it('brings the player chat back with only the messages after the deletion', async () => {
       const service = makeService()
       const id = await openChat(service, 'Antes de borrar')
       advance(5)
-      await service.remove(OWNER, id)
+      await service.remove(PLAYER, id)
       advance(5)
-      await service.send(PLAYER, id, 'Después de borrar')
+      await service.send(OWNER, id, 'Después de borrar')
+
+      const [view] = await service.list(PLAYER)
+      expect(view?.noLeidos).toBe(1)
+      const player = await service.thread(PLAYER, id)
+      expect(player.mensajes.map((m) => m.cuerpo)).toEqual(['Después de borrar'])
+      const owner = await service.thread(OWNER, id)
+      expect(owner.mensajes.map((m) => m.cuerpo)).toEqual(['Antes de borrar', 'Después de borrar'])
+    })
+
+    it('keeps the chat of the owner in the inbox, only empty, so no inquiry is lost', async () => {
+      const service = makeService()
+      const id = await openChat(service, 'Hola, ¿hay turno el 20?')
+      advance(5)
+      await service.remove(OWNER, id)
 
       const [view] = await service.list(OWNER)
+      expect(view?.id).toBe(id)
+      expect(view?.ultimoMensaje).toBeNull()
+      expect(view?.noLeidos).toBe(0)
+      expect((await service.thread(OWNER, id)).mensajes).toEqual([])
+      // The player still has everything.
+      expect((await service.thread(PLAYER, id)).mensajes).toHaveLength(1)
+      expect(await service.list(PLAYER)).toHaveLength(1)
+    })
+
+    it('shows the owner only the new messages after emptying the chat', async () => {
+      const service = makeService()
+      const id = await openChat(service, 'Antes de vaciar')
+      advance(5)
+      await service.remove(OWNER, id)
+      advance(5)
+      await service.send(PLAYER, id, 'Después de vaciar')
+
+      const [view] = await service.list(OWNER)
+      expect(view?.ultimoMensaje?.cuerpo).toBe('Después de vaciar')
       expect(view?.noLeidos).toBe(1)
-      const owner = await service.thread(OWNER, id)
-      expect(owner.mensajes.map((m) => m.cuerpo)).toEqual(['Después de borrar'])
-      const player = await service.thread(PLAYER, id)
-      expect(player.mensajes.map((m) => m.cuerpo)).toEqual(['Antes de borrar', 'Después de borrar'])
+      expect((await service.thread(OWNER, id)).mensajes.map((m) => m.cuerpo)).toEqual([
+        'Después de vaciar',
+      ])
     })
 
     it('keeps the whole history for someone who never deleted', async () => {

@@ -299,8 +299,12 @@ export class ConversacionesService {
     return side === 'jugador' ? conversacion.jugadorLeyoHasta : conversacion.duenoLeyoHasta
   }
 
-  /** Hidden while nothing newer than the deletion arrived. */
+  /**
+   * A chat the player deleted stays hidden while nothing newer than the deletion arrived. The
+   * owner's never hides: "deleting" it only empties its content, so no inquiry gets lost.
+   */
   private isHidden(conversacion: StoredConversacion, side: Side): boolean {
+    if (side === 'dueno') return false
     const eliminoAt = this.eliminoAt(conversacion, side)
     if (!eliminoAt) return false
     return !conversacion.ultimoMensajeAt || conversacion.ultimoMensajeAt <= eliminoAt
@@ -343,15 +347,19 @@ export class ConversacionesService {
     userId: string,
     side: Side
   ): Promise<ConversacionView> {
+    const eliminoAt = this.eliminoAt(conversacion, side)
     // Only what arrived after the last time I read and after the last time I deleted counts.
-    const marks = [this.leyoHasta(conversacion, side), this.eliminoAt(conversacion, side)].filter(
+    const marks = [this.leyoHasta(conversacion, side), eliminoAt].filter(
       (date): date is Date => date !== null
     )
     const after = marks.length > 0 ? new Date(Math.max(...marks.map((d) => d.getTime()))) : null
 
     const [ultimo, noLeidos] = await Promise.all([
       this.prisma.mensaje.findFirst({
-        where: { conversacionId: conversacion.id },
+        where: {
+          conversacionId: conversacion.id,
+          ...(eliminoAt && { createdAt: { gt: eliminoAt } }),
+        },
         orderBy: { createdAt: 'desc' },
       }),
       this.prisma.mensaje.count({

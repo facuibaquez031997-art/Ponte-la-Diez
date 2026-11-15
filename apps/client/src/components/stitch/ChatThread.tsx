@@ -24,6 +24,23 @@ interface ChatThreadProps {
 
 const BOOKING_LINK: Record<Role, string> = { PLAYER: '/reservas', OWNER: '/dueno/reservas' }
 
+// The player hides the chat from their inbox. The owner never loses it: clearing only empties the
+// content, so an inquiry about a slot is not lost by accident.
+const DELETE_COPY: Record<Role, { action: string; confirm: string; message: string }> = {
+  PLAYER: {
+    action: 'Eliminar chat',
+    confirm: 'Sí, eliminar',
+    message:
+      'Se oculta solo de tu bandeja. La otra persona conserva la conversación y, si te vuelve a escribir, vas a ver únicamente los mensajes nuevos.',
+  },
+  OWNER: {
+    action: 'Vaciar chat',
+    confirm: 'Sí, vaciar',
+    message:
+      'Se borran los mensajes de tu pantalla, pero el chat queda en tu bandeja para que no pierdas la consulta. El jugador conserva toda la conversación y, si te escribe de nuevo, vas a ver únicamente los mensajes nuevos.',
+  },
+}
+
 const BookingBanner = ({ turno, cancha }: { turno: TurnoBanner; cancha: string }) => {
   const when = `${formatSlotShortDate(turno.fechaHoraInicio)} ${formatSlotTime(turno.fechaHoraInicio)} hs`
 
@@ -96,6 +113,7 @@ const ChatThread = ({ id, rol, onChanged, onDeleted, onBack }: ChatThreadProps) 
     sendError,
     send,
     loadOlder,
+    reload,
   } = useThread(id, onChanged)
   const [draft, setDraft] = useState('')
   const [confirmingDelete, setConfirmingDelete] = useState(false)
@@ -118,7 +136,13 @@ const ChatThread = ({ id, rol, onChanged, onDeleted, onBack }: ChatThreadProps) 
     setConfirmingDelete(false)
     try {
       await conversacionesService.remove(id)
-      onDeleted()
+      if (rol === 'OWNER') {
+        // The owner keeps the chat: it only empties, so stay here and refresh.
+        await reload()
+        onChanged()
+      } else {
+        onDeleted()
+      }
     } catch (err) {
       setDeleteError(getAuthErrorMessage(err))
     }
@@ -195,12 +219,12 @@ const ChatThread = ({ id, rol, onChanged, onDeleted, onBack }: ChatThreadProps) 
           <button
             type="button"
             onClick={() => setConfirmingDelete(true)}
-            aria-label="Eliminar chat"
-            title="Eliminar chat"
+            aria-label={DELETE_COPY[rol].action}
+            title={DELETE_COPY[rol].action}
             className="rounded-xl bg-surface-container p-2 text-on-surface-variant transition-colors hover:bg-error-container hover:text-on-error-container"
           >
             <span aria-hidden="true" className="material-symbols-outlined text-[20px]">
-              delete
+              {rol === 'OWNER' ? 'delete_sweep' : 'delete'}
             </span>
           </button>
         </div>
@@ -309,9 +333,9 @@ const ChatThread = ({ id, rol, onChanged, onDeleted, onBack }: ChatThreadProps) 
 
       <ConfirmDialog
         open={confirmingDelete}
-        title="Eliminar chat"
-        message="Se oculta solo de tu bandeja. La otra persona conserva la conversación y, si te vuelve a escribir, vas a ver únicamente los mensajes nuevos."
-        confirmLabel="Sí, eliminar"
+        title={DELETE_COPY[rol].action}
+        message={DELETE_COPY[rol].message}
+        confirmLabel={DELETE_COPY[rol].confirm}
         onConfirm={handleDelete}
         onCancel={() => setConfirmingDelete(false)}
       />

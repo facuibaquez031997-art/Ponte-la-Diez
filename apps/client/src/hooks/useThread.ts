@@ -45,10 +45,10 @@ export const useThread = (id: string, onRead: () => void) => {
       const thread = await conversacionesService.thread(id)
       setState((current) => {
         // Keep the older pages the user already loaded; the poll only brings the latest page.
+        // An empty latest page means there is nothing to show (for example the owner just
+        // cleared the chat), so nothing from before may stay on screen.
         const firstOfPage = thread.mensajes[0]?.createdAt
-        const older = firstOfPage
-          ? current.mensajes.filter((m) => m.createdAt < firstOfPage)
-          : current.mensajes
+        const older = firstOfPage ? current.mensajes.filter((m) => m.createdAt < firstOfPage) : []
         const loadedOlder = older.length > 0
         return {
           conversacion: thread.conversacion,
@@ -122,5 +122,5 @@ export const useThread = (id: string, onRead: () => void) => {
     }
   }, [id, state.mensajes])
 
-  return { ...state, sending, sendError, send, loadOlder }
+  return { ...state, sending, sendError, send, loadOlder, reload }
 }
