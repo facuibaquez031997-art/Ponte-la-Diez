@@ -13,6 +13,7 @@ const mondaySchedule = [{ diaSemana: 1, minutoInicio: 1020, minutoFin: 1200 }]
 const makePrisma = () => ({
   cancha: { findUnique: vi.fn(async (_args?: object) => ({ id: 'c1' }) as unknown) },
   horarioCancha: { findMany: vi.fn(async (_args?: object) => mondaySchedule as unknown[]) },
+  reserva: { findMany: vi.fn(async (_args?: object) => [] as unknown[]) },
   turno: {
     findMany: vi.fn(async (_args?: object) => [] as unknown[]),
     createMany: vi.fn(async (_args?: object) => ({ count: 0 })),
@@ -160,6 +161,18 @@ describe('TurnosService.listFree', () => {
       },
     })
     expect(listCall.orderBy).toEqual({ fechaHoraInicio: 'asc' })
+  })
+
+  it('frees the expired holds of that court before it syncs and lists', async () => {
+    const prisma = makePrisma()
+    await new TurnosService(prisma as never).listFree('c1', undefined, now)
+    const where = (prisma.reserva.findMany.mock.calls[0][0] as { where: Record<string, unknown> })
+      .where
+    expect(where.estado).toBe('PENDING')
+    expect(where.turno).toEqual({ canchaId: 'c1' })
+    expect(prisma.reserva.findMany.mock.invocationCallOrder[0]).toBeLessThan(
+      prisma.horarioCancha.findMany.mock.invocationCallOrder[0]
+    )
   })
 
   it('without a date lists every FREE slot that has not started', async () => {

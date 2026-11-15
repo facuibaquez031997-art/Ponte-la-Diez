@@ -144,6 +144,7 @@ model Reserva {
   user       User         @relation(fields: [userId], references: [id])
   estado     ReservaState @default(PENDING)
   montoTotal Float
+  createdAt  DateTime     @default(now())
   pago       Pago?
 }
 

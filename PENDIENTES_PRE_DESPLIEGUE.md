@@ -35,6 +35,8 @@ Estados: ⏳ Pendiente · ✅ Resuelto · ➖ Aceptado como está (anotar motivo
 | 27 | 4 - Contactos | Borrar los usuarios de prueba `t12.{a,b,c,o}.1794103586549@example.com` y `t12.{a,b,c,o}.1794103644308@example.com` (el `o` es un `OWNER`), y sus solicitudes y notificaciones, de la base de desarrollo | ✅ |
 | 28 | 2 - Turnos | La generación de turnos (`TurnosService.sync`) lee y después escribe sin ser atómica: si el dueño guarda una agenda nueva justo mientras un jugador consulta disponibilidad, puede quedar por un instante un turno libre que la agenda ya no incluye (converge en la siguiente consulta o guardado). Evaluar un bloqueo por cancha (advisory lock) cuando haya muchos usuarios | ⏳ |
 | 29 | 2 - Turnos | El filtro `fecha` de `GET /canchas/:id/turnos` acepta años menores a 0100 (por ejemplo `0050-01-01`) y devuelve lista vacía en vez de 400; es cosmético, pero conviene validar un rango de años razonable | ⏳ |
+| 30 | 3 - Reservas | Una reserva sin pagar libera el turno a los 15 minutos (`HOLD_MS`). Si un jugador paga en Mercado Pago justo después de que venza, el pago aprobado llega con el turno ya liberado y quizás tomado por otro: definir qué pasa (reembolso automático o aviso al dueño) y si 15 minutos es el tiempo correcto para el negocio | ⏳ |
+| 31 | 3 - Reservas | Las reservas vencidas se liberan al consultar disponibilidad, al reservar o al abrir "Mis reservas" (no hay tarea programada). Si una cancha no se consulta, su turno vencido sigue oculto hasta la próxima consulta; evaluar un cron o una cola cuando haya tráfico real | ⏳ |
 
 ---
 

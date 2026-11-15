@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common'
 import type { Turno } from '@prisma/client'
 import { PrismaService } from '../../common/prisma/prisma.service.js'
+import { releaseExpiredHolds } from '../reservas/holds.js'
 import { SLOT_MS, WINDOW_DAYS, buildSlots, localDayBounds, windowEnd } from './turnos-slots.js'
 
 export type FreeTurno = Pick<Turno, 'id' | 'fechaHoraInicio' | 'fechaHoraFin'>
@@ -54,6 +55,7 @@ export class TurnosService {
     const cancha = await this.prisma.cancha.findUnique({ where: { id: canchaId } })
     if (!cancha) throw new NotFoundException('La cancha no existe')
 
+    await releaseExpiredHolds(this.prisma, now, { canchaId })
     await this.sync(canchaId, now)
 
     const from = day && day.start > now ? day.start : now
