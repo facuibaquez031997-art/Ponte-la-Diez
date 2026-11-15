@@ -33,3 +33,10 @@ export interface Preference {
   /** Mercado Pago Checkout Pro URL the player is sent to. */
   initPoint: string
 }
+
+/** A booking as the owner of the court sees it. */
+export interface OwnerReserva extends Reserva {
+  jugador: { nombre: string; avatarUrl: string | null }
+  /** When an unpaid booking stops holding the slot, or null once it is not waiting anymore. */
+  expiraEl: string | null
+}

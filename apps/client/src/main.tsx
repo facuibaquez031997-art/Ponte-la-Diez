@@ -11,6 +11,7 @@ import ExplorarCanchasPage from './pages/Canchas/ExplorarCanchasPage'
 import RegisterPage from './pages/Auth/RegisterPage'
 import OwnerCanchasPage from './pages/Owner/OwnerCanchasPage'
 import OwnerHorariosPage from './pages/Owner/OwnerHorariosPage'
+import OwnerReservasPage from './pages/Owner/OwnerReservasPage'
 import HomePage from './pages/Home/HomePage'
 import ProfilePage from './pages/Perfil/ProfilePage'
 import MisReservasPage from './pages/Reservas/MisReservasPage'
@@ -44,6 +45,7 @@ const router = createBrowserRouter([
         children: [
           { path: 'dueno', element: <OwnerCanchasPage /> },
           { path: 'dueno/canchas/:id/horarios', element: <OwnerHorariosPage /> },
+          { path: 'dueno/reservas', element: <OwnerReservasPage /> },
         ],
       },
       { path: 'login', element: <LoginPage /> },

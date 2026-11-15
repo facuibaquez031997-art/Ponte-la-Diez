@@ -1,6 +1,7 @@
 export interface AppNotification {
   id: string
   convocatoriaId: string | null
+  reservaId: string | null
   titulo: string
   cuerpo: string
   leida: boolean

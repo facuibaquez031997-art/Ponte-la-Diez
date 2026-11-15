@@ -20,6 +20,17 @@ export const formatSlotTime = (iso: string): string =>
     timeZone: TIME_ZONE,
   })
 
+/** "dom 15 nov" for the day a slot starts, in Argentina time. */
+export const formatSlotShortDate = (iso: string): string =>
+  new Date(iso)
+    .toLocaleDateString('es-AR', {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+      timeZone: TIME_ZONE,
+    })
+    .replace(/[.,]/g, '')
+
 /** "domingo 15 de noviembre" for the day a slot starts, in Argentina time. */
 export const formatSlotDate = (iso: string): string =>
   new Date(iso).toLocaleDateString('es-AR', {

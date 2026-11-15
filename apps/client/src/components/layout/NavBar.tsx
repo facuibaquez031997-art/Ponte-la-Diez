@@ -15,7 +15,10 @@ const NAV_LINKS = [
 ]
 
 // An owner only manages courts, slots and (later) payments: none of the player links apply.
-const OWNER_LINKS = [{ label: 'Mis canchas', to: '/dueno' }]
+const OWNER_LINKS = [
+  { label: 'Mis canchas', to: '/dueno' },
+  { label: 'Reservas', to: '/dueno/reservas' },
+]
 
 const ROLE_LABELS: Record<Role, string> = {
   PLAYER: 'Jugador',
