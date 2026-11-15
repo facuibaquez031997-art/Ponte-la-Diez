@@ -287,6 +287,10 @@ model Mensaje {
   autorId        String
   autor          User         @relation(fields: [autorId], references: [id])
   cuerpo         String
+  // Slot the owner offers with this message. Plain columns, no foreign key: free slots are deleted
+  // and regenerated with the weekly schedule and an offer must never block that.
+  ofertaTurnoId  String?
+  ofertaInicio   DateTime?
   createdAt      DateTime     @default(now())
 
   @@index([conversacionId, createdAt])

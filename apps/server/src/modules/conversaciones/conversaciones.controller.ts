@@ -62,7 +62,7 @@ export class ConversacionesController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: SendMensajeDto
   ): Promise<MensajeView> {
-    return this.conversaciones.send(user.id, id, dto.cuerpo)
+    return this.conversaciones.send(user.id, id, dto.cuerpo, dto.ofertaTurnoId)
   }
 
   @Post(':id/leida')

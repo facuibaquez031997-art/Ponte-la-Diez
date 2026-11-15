@@ -28,6 +28,13 @@ interface Msg {
   autorId: string
   cuerpo: string
   createdAt: Date
+  ofertaTurnoId: string | null
+  ofertaInicio: Date | null
+}
+interface Slot {
+  canchaId: string
+  estado: 'FREE' | 'RESERVED' | 'BLOCKED'
+  fechaHoraInicio: Date
 }
 interface Reserva {
   estado: string
@@ -41,6 +48,8 @@ const advance = (seconds: number) => vi.setSystemTime(new Date(Date.now() + seco
 const makePrisma = (reservas: Record<string, Reserva> = {}) => {
   const conversaciones: Row[] = []
   const mensajes: Msg[] = []
+  // Slots the owner can offer; tests add, take or move them.
+  const turnos: Record<string, Slot> = {}
   let seq = 0
 
   const withRelations = (row: Row) => ({
@@ -48,6 +57,9 @@ const makePrisma = (reservas: Record<string, Reserva> = {}) => {
     cancha: {
       id: row.canchaId,
       nombre: 'El Mate',
+      barrio: 'Barrio El Sol',
+      precioHora: 20000,
+      montoSena: 5000,
       ownerId: OWNER,
       owner: { nombre: 'Dueño', avatarUrl: null },
     },
@@ -77,7 +89,20 @@ const makePrisma = (reservas: Record<string, Reserva> = {}) => {
         args.where.id === CANCHA ? { id: CANCHA } : null
       ),
     },
+    turno: {
+      findUnique: vi.fn(async (args: { where: { id: string } }) => turnos[args.where.id] ?? null),
+      findMany: vi.fn(async (args: { where: { id: { in: string[] }; estado: string } }) =>
+        args.where.id.in
+          .filter((id) => {
+            const slot = turnos[id]
+            return slot && slot.estado === args.where.estado && slot.fechaHoraInicio > new Date()
+          })
+          .map((id) => ({ id }))
+      ),
+    },
     reserva: {
+      // No unpaid booking is ever old enough to release in these tests.
+      findMany: vi.fn(async (_args?: object) => [] as unknown[]),
       findUnique: vi.fn(async (args: { where: { id: string } }) =>
         args.where.id === 'reserva-mia'
           ? { userId: PLAYER, turno: { canchaId: CANCHA, fechaHoraInicio: TURNO } }
@@ -127,8 +152,22 @@ const makePrisma = (reservas: Record<string, Reserva> = {}) => {
     },
     mensaje: {
       create: vi.fn(
-        async (args: { data: { conversacionId: string; autorId: string; cuerpo: string } }) => {
-          const msg: Msg = { id: `msg-${++seq}`, createdAt: new Date(), ...args.data }
+        async (args: {
+          data: {
+            conversacionId: string
+            autorId: string
+            cuerpo: string
+            ofertaTurnoId?: string
+            ofertaInicio?: Date
+          }
+        }) => {
+          const msg: Msg = {
+            id: `msg-${++seq}`,
+            createdAt: new Date(),
+            ofertaTurnoId: null,
+            ofertaInicio: null,
+            ...args.data,
+          }
           mensajes.push(msg)
           return msg
         }
@@ -169,7 +208,7 @@ const makePrisma = (reservas: Record<string, Reserva> = {}) => {
       ),
     },
   }
-  return prisma
+  return Object.assign(prisma, { turnos })
 }
 
 const makeNotifications = () => ({
@@ -391,6 +430,104 @@ describe('ConversacionesService', () => {
       await service.send(OWNER, id, 'Dos')
       expect((await service.thread(PLAYER, id)).mensajes).toHaveLength(2)
       expect((await service.thread(OWNER, id)).mensajes).toHaveLength(2)
+    })
+  })
+
+  describe('offers', () => {
+    const setup = () => {
+      const prisma = makePrisma()
+      const notifications = makeNotifications()
+      const service = new ConversacionesService(prisma as never, notifications as never)
+      prisma.turnos['t-free'] = { canchaId: CANCHA, estado: 'FREE', fechaHoraInicio: TURNO }
+      return { prisma, notifications, service }
+    }
+
+    it('lets the owner offer a free slot and the player sees it ready to book', async () => {
+      const { service } = setup()
+      const id = await openChat(service)
+      advance(5)
+
+      const sent = await service.send(OWNER, id, 'Tengo el sábado a las 17', 't-free')
+
+      expect(sent.oferta).toMatchObject({
+        turnoId: 't-free',
+        fechaHoraInicio: TURNO,
+        disponible: true,
+        cancha: { id: CANCHA, nombre: 'El Mate', precioHora: 20000, montoSena: 5000 },
+      })
+      const seen = await service.thread(PLAYER, id)
+      expect(seen.mensajes.at(-1)?.oferta).toMatchObject({ turnoId: 't-free', disponible: true })
+      expect(seen.mensajes[0]?.oferta).toBeNull()
+    })
+
+    it('does not let the player offer a slot', async () => {
+      const { service } = setup()
+      const id = await openChat(service)
+
+      await expect(service.send(PLAYER, id, 'Reservame este', 't-free')).rejects.toBeInstanceOf(
+        BadRequestException
+      )
+    })
+
+    it.each([
+      ['unknown', 'nope'],
+      ['of another court', 'otra'],
+      ['already booked', 'tomado'],
+      ['in the past', 'pasado'],
+    ])('rejects a slot that is %s, and sends nothing', async (_name, turnoId) => {
+      const { prisma, notifications, service } = setup()
+      prisma.turnos.otra = { canchaId: 'otra-cancha', estado: 'FREE', fechaHoraInicio: TURNO }
+      prisma.turnos.tomado = { canchaId: CANCHA, estado: 'RESERVED', fechaHoraInicio: TURNO }
+      prisma.turnos.pasado = {
+        canchaId: CANCHA,
+        estado: 'FREE',
+        fechaHoraInicio: new Date('2026-11-14T20:00:00.000Z'),
+      }
+      const id = await openChat(service)
+      advance(5)
+
+      await expect(service.send(OWNER, id, 'Tengo este', turnoId)).rejects.toThrow(
+        'Ese horario ya no está disponible'
+      )
+
+      expect((await service.thread(PLAYER, id)).mensajes).toHaveLength(1)
+      expect(notifications.notifyNewMessage).toHaveBeenCalledTimes(1)
+    })
+
+    it('keeps the offer on screen but not bookable once somebody took the slot', async () => {
+      const { prisma, service } = setup()
+      const id = await openChat(service)
+      advance(5)
+      await service.send(OWNER, id, 'Tengo el sábado a las 17', 't-free')
+
+      prisma.turnos['t-free'].estado = 'RESERVED'
+
+      const offer = (await service.thread(PLAYER, id)).mensajes.at(-1)?.oferta
+      expect(offer).toMatchObject({ turnoId: 't-free', fechaHoraInicio: TURNO, disponible: false })
+    })
+
+    it('keeps the offer, not bookable, when the slot left the schedule and was deleted', async () => {
+      const { prisma, service } = setup()
+      const id = await openChat(service)
+      advance(5)
+      await service.send(OWNER, id, 'Tengo el sábado a las 17', 't-free')
+
+      delete prisma.turnos['t-free']
+
+      const offer = (await service.thread(PLAYER, id)).mensajes.at(-1)?.oferta
+      expect(offer).toMatchObject({ fechaHoraInicio: TURNO, disponible: false })
+    })
+
+    it('stops offering a slot once its time has passed', async () => {
+      const { service } = setup()
+      const id = await openChat(service)
+      advance(5)
+      await service.send(OWNER, id, 'Tengo el sábado a las 17', 't-free')
+
+      vi.setSystemTime(new Date(TURNO.getTime() + 60_000))
+
+      const offer = (await service.thread(PLAYER, id)).mensajes.at(-1)?.oferta
+      expect(offer?.disponible).toBe(false)
     })
   })
 

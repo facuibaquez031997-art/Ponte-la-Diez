@@ -9,6 +9,7 @@ import {
 import type { ReservaState } from '@prisma/client'
 import { PrismaService } from '../../common/prisma/prisma.service.js'
 import { NotificationsService } from '../notifications/notifications.service.js'
+import { releaseExpiredHolds } from '../reservas/holds.js'
 import type { CreateConversacionDto } from './dto/create-conversacion.dto.js'
 import { MAX_MENSAJE_LENGTH } from './dto/send-mensaje.dto.js'
 
@@ -26,6 +27,9 @@ const conversacionInclude = {
     select: {
       id: true,
       nombre: true,
+      barrio: true,
+      precioHora: true,
+      montoSena: true,
       ownerId: true,
       owner: { select: { nombre: true, avatarUrl: true } },
     },
@@ -53,6 +57,9 @@ type StoredConversacion = {
   cancha: {
     id: string
     nombre: string
+    barrio: string
+    precioHora: number
+    montoSena: number
     ownerId: string
     owner: { nombre: string; avatarUrl: string | null }
   }
@@ -88,11 +95,30 @@ export interface ConversacionView {
   noLeidos: number
 }
 
+/** A slot the owner offered in a message, with whether the player can still book it. */
+export interface OfertaView {
+  turnoId: string
+  fechaHoraInicio: Date
+  /** Still free and in the future. A booked, expired or deleted slot is not available anymore. */
+  disponible: boolean
+  cancha: { id: string; nombre: string; barrio: string; precioHora: number; montoSena: number }
+}
+
 export interface MensajeView {
   id: string
   cuerpo: string
   createdAt: Date
   propio: boolean
+  oferta: OfertaView | null
+}
+
+interface StoredMensaje {
+  id: string
+  autorId: string
+  cuerpo: string
+  createdAt: Date
+  ofertaTurnoId: string | null
+  ofertaInicio: Date | null
 }
 
 export interface ThreadView {
@@ -200,18 +226,22 @@ export class ConversacionesService {
     const page = rows.slice(0, THREAD_PAGE_SIZE).reverse()
     return {
       conversacion: this.header(conversacion, side),
-      mensajes: page.map((m) => ({
-        id: m.id,
-        cuerpo: m.cuerpo,
-        createdAt: m.createdAt,
-        propio: m.autorId === userId,
-      })),
+      mensajes: await this.toMensajeViews(page, userId, conversacion.cancha),
       hayMas,
     }
   }
 
-  async send(userId: string, id: string, cuerpo: string): Promise<MensajeView> {
-    const { side } = await this.findParticipating(userId, id)
+  /**
+   * `ofertaTurnoId` attaches a slot to the message so the player can book it from the chat. Only
+   * the owner offers, and only a free, future slot of the court of this conversation.
+   */
+  async send(
+    userId: string,
+    id: string,
+    cuerpo: string,
+    ofertaTurnoId?: string
+  ): Promise<MensajeView> {
+    const { conversacion, side } = await this.findParticipating(userId, id)
 
     const text = cuerpo.trim()
     if (text.length === 0) throw new BadRequestException('El mensaje no puede estar vacío')
@@ -220,6 +250,10 @@ export class ConversacionesService {
         `El mensaje no puede superar los ${MAX_MENSAJE_LENGTH} caracteres`
       )
     }
+
+    const oferta = ofertaTurnoId
+      ? await this.validateOffer(side, conversacion.cancha.id, ofertaTurnoId)
+      : undefined
 
     const recent = await this.prisma.mensaje.count({
       where: { autorId: userId, createdAt: { gt: new Date(Date.now() - MINUTE_MS) } },
@@ -232,7 +266,7 @@ export class ConversacionesService {
     }
 
     const mensaje = await this.prisma.mensaje.create({
-      data: { conversacionId: id, autorId: userId, cuerpo: text },
+      data: { conversacionId: id, autorId: userId, cuerpo: text, ...oferta },
     })
     // The author has obviously read everything up to their own message.
     await this.prisma.conversacion.update({
@@ -248,7 +282,83 @@ export class ConversacionesService {
     await this.notifications.notifyNewMessage(id, userId, text).catch((error: unknown) => {
       this.logger.warn(`Could not notify the new message of ${id}: ${String(error)}`)
     })
-    return { id: mensaje.id, cuerpo: mensaje.cuerpo, createdAt: mensaje.createdAt, propio: true }
+    const [view] = await this.toMensajeViews([mensaje], userId, conversacion.cancha)
+    return view
+  }
+
+  private async validateOffer(
+    side: Side,
+    canchaId: string,
+    turnoId: string
+  ): Promise<{ ofertaTurnoId: string; ofertaInicio: Date }> {
+    if (side !== 'dueno') {
+      throw new BadRequestException('Solo el dueño puede ofrecer un horario')
+    }
+    const now = new Date()
+    // A booking nobody paid blocks its slot until released: free it before judging the slot.
+    await releaseExpiredHolds(this.prisma, now, { canchaId })
+    const turno = await this.prisma.turno.findUnique({
+      where: { id: turnoId },
+      select: { canchaId: true, estado: true, fechaHoraInicio: true },
+    })
+    if (
+      !turno ||
+      turno.canchaId !== canchaId ||
+      turno.estado !== 'FREE' ||
+      turno.fechaHoraInicio <= now
+    ) {
+      throw new BadRequestException('Ese horario ya no está disponible')
+    }
+    return { ofertaTurnoId: turnoId, ofertaInicio: turno.fechaHoraInicio }
+  }
+
+  /** Messages as the user sees them, with each offer checked against the slot as it is right now. */
+  private async toMensajeViews(
+    rows: StoredMensaje[],
+    userId: string,
+    cancha: StoredConversacion['cancha']
+  ): Promise<MensajeView[]> {
+    const now = new Date()
+    const offered = rows.filter(
+      (row): row is StoredMensaje & { ofertaTurnoId: string; ofertaInicio: Date } =>
+        row.ofertaTurnoId !== null && row.ofertaInicio !== null && row.ofertaInicio > now
+    )
+
+    let free = new Set<string>()
+    if (offered.length > 0) {
+      await releaseExpiredHolds(this.prisma, now, { canchaId: cancha.id })
+      const turnos = await this.prisma.turno.findMany({
+        where: {
+          id: { in: offered.map((row) => row.ofertaTurnoId) },
+          estado: 'FREE',
+          fechaHoraInicio: { gt: now },
+        },
+        select: { id: true },
+      })
+      free = new Set(turnos.map((turno) => turno.id))
+    }
+
+    return rows.map((row) => ({
+      id: row.id,
+      cuerpo: row.cuerpo,
+      createdAt: row.createdAt,
+      propio: row.autorId === userId,
+      oferta:
+        row.ofertaTurnoId && row.ofertaInicio
+          ? {
+              turnoId: row.ofertaTurnoId,
+              fechaHoraInicio: row.ofertaInicio,
+              disponible: free.has(row.ofertaTurnoId),
+              cancha: {
+                id: cancha.id,
+                nombre: cancha.nombre,
+                barrio: cancha.barrio,
+                precioHora: cancha.precioHora,
+                montoSena: cancha.montoSena,
+              },
+            }
+          : null,
+    }))
   }
 
   async markRead(userId: string, id: string): Promise<void> {
@@ -261,7 +371,7 @@ export class ConversacionesService {
     await this.notifications.markConversationRead(userId, id)
   }
 
-  /** Deleting is individual: it only hides the chat from the inbox of whoever deletes it. */
+  /** Deleting is individual: it only empties the chat for whoever deletes it, it never leaves their inbox. */
   async remove(userId: string, id: string): Promise<void> {
     const { side } = await this.findParticipating(userId, id)
     const now = new Date()

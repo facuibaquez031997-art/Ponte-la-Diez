@@ -1,4 +1,4 @@
-import { IsString, MaxLength } from 'class-validator'
+import { IsOptional, IsString, IsUUID, MaxLength } from 'class-validator'
 
 export const MAX_MENSAJE_LENGTH = 1000
 
@@ -8,4 +8,9 @@ export class SendMensajeDto {
     message: `El mensaje no puede superar los ${MAX_MENSAJE_LENGTH} caracteres`,
   })
   cuerpo!: string
+
+  /** A free slot of the court that the owner offers with the message. */
+  @IsOptional()
+  @IsUUID()
+  ofertaTurnoId?: string
 }
