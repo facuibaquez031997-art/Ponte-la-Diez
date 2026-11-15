@@ -13,6 +13,8 @@ import OwnerCanchasPage from './pages/Owner/OwnerCanchasPage'
 import OwnerHorariosPage from './pages/Owner/OwnerHorariosPage'
 import HomePage from './pages/Home/HomePage'
 import ProfilePage from './pages/Perfil/ProfilePage'
+import MisReservasPage from './pages/Reservas/MisReservasPage'
+import ReservaResultadoPage from './pages/Reservas/ReservaResultadoPage'
 import './styles/index.css'
 
 const router = createBrowserRouter([
@@ -28,6 +30,13 @@ const router = createBrowserRouter([
           { path: 'perfil', element: <ProfilePage /> },
           { path: 'convocatorias', element: <ConvocatoriasPage /> },
           { path: 'contactos', element: <ContactosPage /> },
+        ],
+      },
+      {
+        element: <ProtectedRoute roles={['PLAYER']} />,
+        children: [
+          { path: 'reservas', element: <MisReservasPage /> },
+          { path: 'reservas/resultado', element: <ReservaResultadoPage /> },
         ],
       },
       {

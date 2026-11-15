@@ -10,7 +10,7 @@ const NAV_LINKS = [
   { label: 'Explorar canchas', to: '/canchas' },
   { label: 'Falta uno', to: '/convocatorias' },
   { label: 'Contactos', to: '/contactos' },
-  { label: 'Mis reservas', to: '#' },
+  { label: 'Mis reservas', to: '/reservas' },
   { label: 'Mensajes', to: '#' },
 ]
 
