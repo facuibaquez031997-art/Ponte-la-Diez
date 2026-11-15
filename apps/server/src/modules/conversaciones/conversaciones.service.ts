@@ -166,9 +166,10 @@ export class ConversacionesService {
       take: INBOX_FETCH_SIZE,
     })
 
+    // Nobody loses a chat by deleting it: deleting only empties its content for whoever did it.
     const visible = rows.flatMap((row) => {
       const side = this.sideOf(row, userId)
-      return side && !this.isHidden(row, side) ? [{ row, side }] : []
+      return side ? [{ row, side }] : []
     })
 
     return Promise.all(
@@ -297,17 +298,6 @@ export class ConversacionesService {
 
   private leyoHasta(conversacion: StoredConversacion, side: Side): Date | null {
     return side === 'jugador' ? conversacion.jugadorLeyoHasta : conversacion.duenoLeyoHasta
-  }
-
-  /**
-   * A chat the player deleted stays hidden while nothing newer than the deletion arrived. The
-   * owner's never hides: "deleting" it only empties its content, so no inquiry gets lost.
-   */
-  private isHidden(conversacion: StoredConversacion, side: Side): boolean {
-    if (side === 'dueno') return false
-    const eliminoAt = this.eliminoAt(conversacion, side)
-    if (!eliminoAt) return false
-    return !conversacion.ultimoMensajeAt || conversacion.ultimoMensajeAt <= eliminoAt
   }
 
   private header(conversacion: StoredConversacion, side: Side): ThreadView['conversacion'] {

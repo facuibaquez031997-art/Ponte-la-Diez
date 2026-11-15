@@ -320,31 +320,36 @@ describe('ConversacionesService', () => {
   })
 
   describe('deleting is individual', () => {
-    it('hides the chat from the inbox of the player who deleted it, not from the owner', async () => {
+    it('keeps the chat of the player in the inbox too, only empty, and the owner keeps everything', async () => {
       const service = makeService()
-      const id = await openChat(service)
+      const id = await openChat(service, 'Hola, ¿hay turno el 20?')
       advance(5)
       await service.remove(PLAYER, id)
 
-      expect(await service.list(PLAYER)).toEqual([])
+      const [view] = await service.list(PLAYER)
+      expect(view?.id).toBe(id)
+      expect(view?.ultimoMensaje).toBeNull()
+      expect(view?.noLeidos).toBe(0)
+      expect((await service.thread(PLAYER, id)).mensajes).toEqual([])
       expect(await service.list(OWNER)).toHaveLength(1)
       expect((await service.thread(OWNER, id)).mensajes).toHaveLength(1)
     })
 
-    it('brings the player chat back with only the messages after the deletion', async () => {
+    it('shows the player only the new messages after emptying the chat', async () => {
       const service = makeService()
-      const id = await openChat(service, 'Antes de borrar')
+      const id = await openChat(service, 'Antes de vaciar')
       advance(5)
       await service.remove(PLAYER, id)
       advance(5)
-      await service.send(OWNER, id, 'Después de borrar')
+      await service.send(OWNER, id, 'Después de vaciar')
 
       const [view] = await service.list(PLAYER)
+      expect(view?.ultimoMensaje?.cuerpo).toBe('Después de vaciar')
       expect(view?.noLeidos).toBe(1)
       const player = await service.thread(PLAYER, id)
-      expect(player.mensajes.map((m) => m.cuerpo)).toEqual(['Después de borrar'])
+      expect(player.mensajes.map((m) => m.cuerpo)).toEqual(['Después de vaciar'])
       const owner = await service.thread(OWNER, id)
-      expect(owner.mensajes.map((m) => m.cuerpo)).toEqual(['Antes de borrar', 'Después de borrar'])
+      expect(owner.mensajes.map((m) => m.cuerpo)).toEqual(['Antes de vaciar', 'Después de vaciar'])
     })
 
     it('keeps the chat of the owner in the inbox, only empty, so no inquiry is lost', async () => {

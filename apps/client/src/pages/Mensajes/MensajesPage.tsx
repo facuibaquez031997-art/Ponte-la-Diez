@@ -14,10 +14,6 @@ const MensajesPage = () => {
   const { conversaciones, loading, error, reload } = useConversaciones()
 
   const goToList = useCallback(() => navigate('/mensajes'), [navigate])
-  const handleDeleted = useCallback(() => {
-    void reload()
-    navigate('/mensajes', { replace: true })
-  }, [reload, navigate])
 
   if (!user) return null
   const unread = conversaciones.reduce((total, c) => total + c.noLeidos, 0)
@@ -82,14 +78,7 @@ const MensajesPage = () => {
 
           <div className={`lg:col-span-8 ${id ? 'flex' : 'hidden lg:flex'}`}>
             {id ? (
-              <ChatThread
-                key={id}
-                id={id}
-                rol={user.rol}
-                onChanged={reload}
-                onDeleted={handleDeleted}
-                onBack={goToList}
-              />
+              <ChatThread key={id} id={id} rol={user.rol} onChanged={reload} onBack={goToList} />
             ) : (
               <div className="flex flex-1 flex-col items-center justify-center gap-2 bg-surface-bright p-8 text-center text-on-surface-variant">
                 <span
