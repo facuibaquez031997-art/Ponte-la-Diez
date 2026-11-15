@@ -17,6 +17,7 @@ const NAV_LINKS = [
 // An owner only manages courts, slots and (later) payments: none of the player links apply.
 const OWNER_LINKS = [
   { label: 'Mis canchas', to: '/dueno' },
+  { label: 'Agenda', to: '/dueno/agenda' },
   { label: 'Reservas', to: '/dueno/reservas' },
   { label: 'Mensajes', to: '/mensajes' },
 ]

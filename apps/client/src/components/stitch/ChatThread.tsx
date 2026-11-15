@@ -9,6 +9,7 @@ import { chatSubtitle, chatTitle } from '../../utils/chat'
 import { chatDayKey, formatChatDay, formatSlotShortDate, formatSlotTime } from '../../utils/dates'
 import { formatPesos } from '../../utils/money'
 import ConfirmDialog from '../common/ConfirmDialog'
+import ChatAgendaPanel from './ChatAgendaPanel'
 import ChatAvatar from './ChatAvatar'
 
 interface ChatThreadProps {
@@ -116,6 +117,7 @@ const ChatThread = ({ id, rol, onChanged, onDeleted, onBack }: ChatThreadProps) 
     reload,
   } = useThread(id, onChanged)
   const [draft, setDraft] = useState('')
+  const [agendaOpen, setAgendaOpen] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -202,6 +204,23 @@ const ChatThread = ({ id, rol, onChanged, onDeleted, onBack }: ChatThreadProps) 
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          {rol === 'OWNER' && (
+            <button
+              type="button"
+              onClick={() => setAgendaOpen((open) => !open)}
+              aria-expanded={agendaOpen}
+              className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold transition-colors ${
+                agendaOpen
+                  ? 'bg-primary-container text-on-primary'
+                  : 'bg-secondary-container text-on-secondary-fixed hover:bg-secondary-fixed-dim'
+              }`}
+            >
+              <span aria-hidden="true" className="material-symbols-outlined text-[18px]">
+                calendar_month
+              </span>
+              <span className="hidden sm:inline">Ver agenda</span>
+            </button>
+          )}
           {conversacion.turno && !conversacion.turno.liberado && (
             <Link
               to={BOOKING_LINK[rol]}
@@ -232,6 +251,13 @@ const ChatThread = ({ id, rol, onChanged, onDeleted, onBack }: ChatThreadProps) 
 
       {conversacion.turno && (
         <BookingBanner turno={conversacion.turno} cancha={conversacion.cancha.nombre} />
+      )}
+
+      {rol === 'OWNER' && agendaOpen && (
+        <ChatAgendaPanel
+          canchaId={conversacion.cancha.id}
+          onOffer={(text) => setDraft((current) => (current ? `${current} ${text}` : text))}
+        />
       )}
 
       <div className="flex-1 space-y-4 overflow-y-auto p-4" aria-live="polite">
