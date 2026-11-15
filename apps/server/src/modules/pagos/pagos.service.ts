@@ -5,10 +5,21 @@ import {
   Logger,
   NotFoundException,
   ServiceUnavailableException,
+  UnauthorizedException,
 } from '@nestjs/common'
 import { PrismaService } from '../../common/prisma/prisma.service.js'
 import { HOLD_MS, releaseExpiredHolds } from '../reservas/holds.js'
 import { MercadoPagoGateway, type PreferenceResult } from './mercadopago.gateway.js'
+import { verifyWebhookSignature } from './webhook-signature.js'
+
+export type NotificationResult = 'confirmed' | 'duplicate' | 'ignored'
+
+export interface WebhookRequest {
+  xSignature?: string
+  xRequestId?: string
+  dataId?: string
+  type?: string
+}
 
 const dateFormat = new Intl.DateTimeFormat('es-AR', {
   timeZone: 'America/Argentina/Buenos_Aires',
@@ -68,5 +79,76 @@ export class PagosService {
       data: { mpPreferenceId: preference.preferenceId },
     })
     return preference
+  }
+
+  /**
+   * Entry point of POST /pagos/webhook. Only a notification signed with the application secret
+   * gets through; the body is never trusted, the payment is read again from Mercado Pago.
+   */
+  async handleWebhook(request: WebhookRequest): Promise<{ result: NotificationResult }> {
+    const secret = this.gateway.getWebhookSecret()
+    if (!secret) {
+      throw new ServiceUnavailableException('El webhook de Mercado Pago no está configurado')
+    }
+    const signed = verifyWebhookSignature({
+      xSignature: request.xSignature,
+      xRequestId: request.xRequestId,
+      dataId: request.dataId,
+      secret,
+    })
+    if (!signed) throw new UnauthorizedException('Firma de notificación inválida')
+
+    if (request.type !== 'payment' || !request.dataId) return { result: 'ignored' }
+    return { result: await this.handlePaymentNotification(request.dataId) }
+  }
+
+  /**
+   * Confirms the booking of an APPROVED payment. Safe to run any number of times for the same
+   * payment. A payment that is rejected, pending or cancelled changes nothing: Checkout Pro lets
+   * the player retry, and the booking hold ends on its own.
+   */
+  async handlePaymentNotification(paymentId: string): Promise<NotificationResult> {
+    const payment = await this.gateway.getPayment(paymentId)
+    if (!payment || payment.status !== 'approved' || !payment.externalReference) return 'ignored'
+
+    const reserva = await this.prisma.reserva.findUnique({
+      where: { id: payment.externalReference },
+      include: { pago: true },
+    })
+    if (!reserva?.pago) {
+      this.logger.error(
+        `Payment ${payment.id} was approved but booking ${payment.externalReference} no longer exists: needs a manual refund`
+      )
+      return 'ignored'
+    }
+    if (reserva.pago.estadoPago === 'APPROVED') return 'duplicate'
+
+    if (payment.transactionAmount < reserva.pago.monto) {
+      this.logger.warn(
+        `Payment ${payment.id} paid ${payment.transactionAmount}, less than the ${reserva.pago.monto} charged: not confirmed`
+      )
+      return 'ignored'
+    }
+
+    const pagoId = reserva.pago.id
+    const confirmed = await this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.reserva.updateMany({
+        where: { id: reserva.id, estado: 'PENDING' },
+        data: { estado: 'CONFIRMED' },
+      })
+      if (claimed.count === 0) return false
+      await tx.pago.update({
+        where: { id: pagoId },
+        data: { estadoPago: 'APPROVED', mpPaymentId: payment.id },
+      })
+      return true
+    })
+    if (!confirmed) {
+      this.logger.error(
+        `Payment ${payment.id} was approved but booking ${reserva.id} is not PENDING anymore: needs a manual review`
+      )
+      return 'ignored'
+    }
+    return 'confirmed'
   }
 }

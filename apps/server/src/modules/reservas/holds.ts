@@ -40,7 +40,8 @@ export async function releaseExpiredHolds(
     }),
     prisma.reserva.deleteMany({ where: { id: { in: reservaIds }, estado: 'PENDING' } }),
     prisma.turno.updateMany({
-      where: { id: { in: turnoIds }, estado: 'RESERVED' },
+      // A booking confirmed meanwhile (webhook) is still attached to its slot: keep it RESERVED.
+      where: { id: { in: turnoIds }, estado: 'RESERVED', reserva: null },
       data: { estado: 'FREE' },
     }),
   ])

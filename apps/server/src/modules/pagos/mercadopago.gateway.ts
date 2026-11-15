@@ -1,7 +1,16 @@
 import { Injectable } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
-import { MercadoPagoConfig, Preference } from 'mercadopago'
+import { MercadoPagoConfig, Payment, Preference } from 'mercadopago'
 import { type PreferenceInput, buildPreferenceBody } from './preference-body.js'
+
+export interface PaymentInfo {
+  id: string
+  /** `approved`, `rejected`, `pending`, `in_process`, `cancelled`, `refunded`... */
+  status: string
+  /** The booking id sent as `external_reference` when the preference was created. */
+  externalReference?: string
+  transactionAmount: number
+}
 
 export interface PreferenceResult {
   preferenceId: string
@@ -15,6 +24,7 @@ export class MercadoPagoGateway {
   private readonly client?: MercadoPagoConfig
   private readonly clientUrl: string
   private readonly notificationUrl?: string
+  private readonly webhookSecret?: string
 
   constructor(config: ConfigService) {
     const accessToken = config.get<string>('MP_ACCESS_TOKEN')
@@ -23,10 +33,33 @@ export class MercadoPagoGateway {
       : undefined
     this.clientUrl = config.get<string>('CLIENT_URL') ?? 'http://localhost:5173'
     this.notificationUrl = config.get<string>('MP_NOTIFICATION_URL')
+    this.webhookSecret = config.get<string>('MP_WEBHOOK_SECRET')
   }
 
   isConfigured(): boolean {
     return this.client !== undefined
+  }
+
+  getWebhookSecret(): string | undefined {
+    return this.webhookSecret
+  }
+
+  /** Reads a payment straight from Mercado Pago. Returns null when it does not exist. */
+  async getPayment(id: string): Promise<PaymentInfo | null> {
+    if (!this.client) throw new Error('Mercado Pago is not configured')
+
+    try {
+      const payment = await new Payment(this.client).get({ id })
+      return {
+        id: String(payment.id),
+        status: payment.status ?? 'unknown',
+        externalReference: payment.external_reference ?? undefined,
+        transactionAmount: payment.transaction_amount ?? 0,
+      }
+    } catch (error) {
+      if ((error as { status?: number }).status === 404) return null
+      throw error
+    }
   }
 
   async createPreference(input: PreferenceInput): Promise<PreferenceResult> {

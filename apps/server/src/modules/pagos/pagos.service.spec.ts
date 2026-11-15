@@ -5,6 +5,7 @@ import {
   ConflictException,
   NotFoundException,
   ServiceUnavailableException,
+  UnauthorizedException,
 } from '@nestjs/common'
 import { HOLD_MS } from '../reservas/holds.js'
 import { PagosService } from './pagos.service.js'
@@ -25,16 +26,35 @@ const reserva = (overrides: object = {}) => ({
   ...overrides,
 })
 
-const makePrisma = () => ({
-  reserva: {
-    findUnique: vi.fn(async (_args?: object) => reserva() as unknown),
-    findMany: vi.fn(async (_args?: object) => [] as unknown[]),
-  },
-  pago: { update: vi.fn(async (_args?: object) => ({})) },
+const payment = (overrides: object = {}) => ({
+  id: '123456',
+  status: 'approved',
+  externalReference: 'r1',
+  transactionAmount: 5000,
+  ...overrides,
 })
+
+const makePrisma = () => {
+  const prisma = {
+    reserva: {
+      findUnique: vi.fn(async (_args?: object) => reserva() as unknown),
+      findMany: vi.fn(async (_args?: object) => [] as unknown[]),
+      updateMany: vi.fn(async (_args?: object) => ({ count: 1 })),
+    },
+    pago: { update: vi.fn(async (_args?: object) => ({})) },
+    $transaction: vi.fn(async (arg: unknown) =>
+      typeof arg === 'function'
+        ? (arg as (tx: unknown) => unknown)(prisma)
+        : Promise.all(arg as Promise<unknown>[])
+    ),
+  }
+  return prisma
+}
 
 const makeGateway = () => ({
   isConfigured: vi.fn(() => true),
+  getWebhookSecret: vi.fn(() => 'secret' as string | undefined),
+  getPayment: vi.fn(async (_id?: string) => payment() as unknown),
   createPreference: vi.fn(async (_input?: object) => ({
     preferenceId: 'pref-1',
     initPoint: 'https://mp.test/checkout/pref-1',
@@ -134,5 +154,134 @@ describe('PagosService.createPreference', () => {
       BadGatewayException
     )
     expect(prisma.pago.update).not.toHaveBeenCalled()
+  })
+})
+
+describe('PagosService.handlePaymentNotification', () => {
+  it('confirms the booking and stores the payment id when the payment is approved', async () => {
+    const { service, prisma, gateway } = build()
+    const result = await service.handlePaymentNotification('123456')
+    expect(result).toBe('confirmed')
+    expect(gateway.getPayment).toHaveBeenCalledWith('123456')
+    expect(prisma.reserva.updateMany).toHaveBeenCalledWith({
+      where: { id: 'r1', estado: 'PENDING' },
+      data: { estado: 'CONFIRMED' },
+    })
+    expect(prisma.pago.update).toHaveBeenCalledWith({
+      where: { id: 'p1' },
+      data: { estadoPago: 'APPROVED', mpPaymentId: '123456' },
+    })
+  })
+
+  it('does nothing when the same approval arrives again', async () => {
+    const { service, prisma } = build()
+    prisma.reserva.findUnique.mockResolvedValue(
+      reserva({ estado: 'CONFIRMED', pago: { id: 'p1', estadoPago: 'APPROVED', monto: 5000 } })
+    )
+    expect(await service.handlePaymentNotification('123456')).toBe('duplicate')
+    expect(prisma.reserva.updateMany).not.toHaveBeenCalled()
+    expect(prisma.pago.update).not.toHaveBeenCalled()
+  })
+
+  it('does not confirm when the amount paid is lower than the amount charged', async () => {
+    const { service, prisma, gateway } = build()
+    gateway.getPayment.mockResolvedValue(payment({ transactionAmount: 4999 }))
+    expect(await service.handlePaymentNotification('123456')).toBe('ignored')
+    expect(prisma.reserva.updateMany).not.toHaveBeenCalled()
+    expect(prisma.pago.update).not.toHaveBeenCalled()
+  })
+
+  it('does not touch anything when the booking was already released', async () => {
+    const { service, prisma } = build()
+    prisma.reserva.findUnique.mockResolvedValue(null)
+    expect(await service.handlePaymentNotification('123456')).toBe('ignored')
+    expect(prisma.pago.update).not.toHaveBeenCalled()
+  })
+
+  it('does not update the payment when the booking stopped being PENDING meanwhile', async () => {
+    const { service, prisma } = build()
+    prisma.reserva.updateMany.mockResolvedValue({ count: 0 })
+    expect(await service.handlePaymentNotification('123456')).toBe('ignored')
+    expect(prisma.pago.update).not.toHaveBeenCalled()
+  })
+
+  it.each(['rejected', 'cancelled', 'pending', 'in_process'])(
+    'changes nothing for a %s payment so the player can retry until the hold ends',
+    async (status) => {
+      const { service, prisma, gateway } = build()
+      gateway.getPayment.mockResolvedValue(payment({ status }))
+      expect(await service.handlePaymentNotification('123456')).toBe('ignored')
+      expect(prisma.reserva.updateMany).not.toHaveBeenCalled()
+      expect(prisma.pago.update).not.toHaveBeenCalled()
+    }
+  )
+
+  it('ignores a payment that Mercado Pago does not know', async () => {
+    const { service, gateway, prisma } = build()
+    gateway.getPayment.mockResolvedValue(null)
+    expect(await service.handlePaymentNotification('123456')).toBe('ignored')
+    expect(prisma.reserva.findUnique).not.toHaveBeenCalled()
+  })
+
+  it('ignores a payment that is not linked to a booking', async () => {
+    const { service, gateway, prisma } = build()
+    gateway.getPayment.mockResolvedValue(payment({ externalReference: undefined }))
+    expect(await service.handlePaymentNotification('123456')).toBe('ignored')
+    expect(prisma.reserva.findUnique).not.toHaveBeenCalled()
+  })
+
+  it('fails when Mercado Pago cannot be reached so it retries the notification', async () => {
+    const { service, gateway } = build()
+    gateway.getPayment.mockRejectedValue(new Error('network down'))
+    await expect(service.handlePaymentNotification('123456')).rejects.toThrow('network down')
+  })
+})
+
+describe('PagosService.handleWebhook', () => {
+  const request = (overrides: object = {}) => ({
+    xSignature: 'ts=1,v1=abc',
+    xRequestId: 'req-1',
+    dataId: '123456',
+    type: 'payment',
+    ...overrides,
+  })
+
+  it('answers 503 and reads nothing when the webhook secret is not configured', async () => {
+    const { service, gateway } = build()
+    gateway.getWebhookSecret.mockReturnValue(undefined)
+    await expect(service.handleWebhook(request())).rejects.toBeInstanceOf(
+      ServiceUnavailableException
+    )
+    expect(gateway.getPayment).not.toHaveBeenCalled()
+  })
+
+  it('answers 401 for a bad signature and never asks Mercado Pago for the payment', async () => {
+    const { service, gateway } = build()
+    await expect(service.handleWebhook(request())).rejects.toBeInstanceOf(UnauthorizedException)
+    expect(gateway.getPayment).not.toHaveBeenCalled()
+  })
+
+  it('processes a signed payment notification', async () => {
+    const { service, prisma } = build()
+    const { createHmac } = await import('node:crypto')
+    const v1 = createHmac('sha256', 'secret')
+      .update('id:123456;request-id:req-1;ts:1;')
+      .digest('hex')
+    const result = await service.handleWebhook(request({ xSignature: `ts=1,v1=${v1}` }))
+    expect(result).toEqual({ result: 'confirmed' })
+    expect(prisma.pago.update).toHaveBeenCalled()
+  })
+
+  it('ignores signed notifications of other topics or without a payment id', async () => {
+    const { service, gateway } = build()
+    const { createHmac } = await import('node:crypto')
+    const v1 = createHmac('sha256', 'secret')
+      .update('id:123456;request-id:req-1;ts:1;')
+      .digest('hex')
+    const xSignature = `ts=1,v1=${v1}`
+    expect(await service.handleWebhook(request({ xSignature, type: 'merchant_order' }))).toEqual({
+      result: 'ignored',
+    })
+    expect(gateway.getPayment).not.toHaveBeenCalled()
   })
 })

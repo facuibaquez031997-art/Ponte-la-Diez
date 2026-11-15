@@ -58,7 +58,7 @@ describe('releaseExpiredHolds', () => {
       where: { id: { in: ['r1', 'r2'] }, estado: 'PENDING' },
     })
     expect(prisma.turno.updateMany).toHaveBeenCalledWith({
-      where: { id: { in: ['t1', 't2'] }, estado: 'RESERVED' },
+      where: { id: { in: ['t1', 't2'] }, estado: 'RESERVED', reserva: null },
       data: { estado: 'FREE' },
     })
   })
