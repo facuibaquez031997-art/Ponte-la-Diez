@@ -57,3 +57,9 @@ export const localDayBounds = (fecha: string): { start: Date; end: Date } => {
   }
   throw new BadRequestException('La fecha no es válida, usá el formato AAAA-MM-DD')
 }
+
+/** Today as AAAA-MM-DD in Argentina. */
+export const localDateString = (now: Date): string => {
+  const { year, month, day } = localToday(now)
+  return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
