@@ -13,7 +13,13 @@ interface ExploreState {
 const INITIAL: ExploreState = { canchas: [], slots: {}, loading: true, error: null }
 
 /** Courts that match the filters, each with its free slots for the chosen day. */
-export const useExploreCanchas = (filters: CanchaFilters, fecha: string, enabled: boolean) => {
+export const useExploreCanchas = (
+  filters: CanchaFilters,
+  fecha: string,
+  enabled: boolean,
+  // Changing it loads the courts and slots again (for example after losing a slot to someone else).
+  refreshKey = 0
+) => {
   const [state, setState] = useState<ExploreState>(INITIAL)
   const { barrio, tipoSuperficie, precioMax } = filters
 
@@ -41,7 +47,7 @@ export const useExploreCanchas = (filters: CanchaFilters, fecha: string, enabled
       ignore = true
       window.clearTimeout(timer)
     }
-  }, [enabled, barrio, tipoSuperficie, precioMax, fecha])
+  }, [enabled, barrio, tipoSuperficie, precioMax, fecha, refreshKey])
 
   return state
 }

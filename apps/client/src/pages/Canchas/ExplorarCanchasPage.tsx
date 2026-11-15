@@ -21,7 +21,13 @@ const ExplorarCanchasPage = () => {
   const [today] = useState(todayInArgentina)
   const [filters, setFilters] = useState<CanchaFilters>(NO_FILTERS)
   const [fecha, setFecha] = useState(today)
-  const { canchas, slots, loading, error } = useExploreCanchas(filters, fecha, user !== null)
+  const [refreshKey, setRefreshKey] = useState(0)
+  const { canchas, slots, loading, error } = useExploreCanchas(
+    filters,
+    fecha,
+    user !== null,
+    refreshKey
+  )
 
   const handleApply = (next: CanchaFilters, nextFecha: string) => {
     setFilters(next)
@@ -108,7 +114,14 @@ const ExplorarCanchasPage = () => {
         {user && !loading && canchas.length > 0 && (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
             {canchas.map((cancha) => (
-              <VenueCard key={cancha.id} cancha={cancha} slots={slots[cancha.id] ?? []} />
+              <VenueCard
+                key={cancha.id}
+                cancha={cancha}
+                slots={slots[cancha.id] ?? []}
+                fecha={fecha}
+                canBook={user.rol === 'PLAYER'}
+                onSlotTaken={() => setRefreshKey((key) => key + 1)}
+              />
             ))}
           </div>
         )}

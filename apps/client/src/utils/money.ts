@@ -6,3 +6,12 @@ export const onlyDigits = (text: string): string => text.replace(/\D/g, '').slic
 
 export const formatMoney = (digits: string): string =>
   digits ? Number(digits).toLocaleString('es-AR') : ''
+
+const pesosFormat = new Intl.NumberFormat('es-AR', {
+  style: 'currency',
+  currency: 'ARS',
+  maximumFractionDigits: 0,
+})
+
+/** "$ 20.000" for an amount in pesos. */
+export const formatPesos = (amount: number): string => pesosFormat.format(amount)
