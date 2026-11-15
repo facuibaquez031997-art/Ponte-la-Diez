@@ -11,13 +11,14 @@ const NAV_LINKS = [
   { label: 'Falta uno', to: '/convocatorias' },
   { label: 'Contactos', to: '/contactos' },
   { label: 'Mis reservas', to: '/reservas' },
-  { label: 'Mensajes', to: '#' },
+  { label: 'Mensajes', to: '/mensajes' },
 ]
 
 // An owner only manages courts, slots and (later) payments: none of the player links apply.
 const OWNER_LINKS = [
   { label: 'Mis canchas', to: '/dueno' },
   { label: 'Reservas', to: '/dueno/reservas' },
+  { label: 'Mensajes', to: '/mensajes' },
 ]
 
 const ROLE_LABELS: Record<Role, string> = {

@@ -48,3 +48,17 @@ export const formatLongDate = (date: string): string =>
     month: 'long',
     timeZone: 'UTC',
   })
+
+const dayInArgentina = (iso: string): string =>
+  new Date(iso).toLocaleDateString('en-CA', { timeZone: TIME_ZONE })
+
+/** "10:42" for a message sent today, "dom 15 nov" for an older one. */
+export const formatChatStamp = (iso: string): string =>
+  dayInArgentina(iso) === todayInArgentina() ? formatSlotTime(iso) : formatSlotShortDate(iso)
+
+/** The day a message was sent, to group the thread: "Hoy" or "domingo 15 de noviembre". */
+export const formatChatDay = (iso: string): string =>
+  dayInArgentina(iso) === todayInArgentina() ? 'Hoy' : formatSlotDate(iso)
+
+/** AAAA-MM-DD in Argentina, to tell whether two messages share the same day. */
+export const chatDayKey = dayInArgentina

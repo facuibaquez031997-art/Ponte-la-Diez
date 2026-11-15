@@ -16,9 +16,9 @@ Branch: feat/chat-por-reserva (from feat/pagos-mercadopago, because it needs `Re
 
 ## Tasks
 
-- [ ] T1 S2 S3 S4 S6 S7 · inline · Prisma `Conversacion` + `Mensaje` (index `[conversacionId, createdAt]`) and migration · commit: -
-- [ ] T2 S2 S3 S4 S5 S6 S8 · inline · server module `conversaciones`: create, list (unread, hidden rule), thread (paginated), send (limit), mark read, delete-for-me · commit: -
-- [ ] T3 S9 · inline · notification to the other participant, one unread per conversation, + push · commit: -
+- [x] T1 S2 S3 S4 S6 S7 · inline · Prisma `Conversacion` + `Mensaje` (index `[conversacionId, createdAt]`) and migration · commit: 8ef350c
+- [x] T2 S2 S3 S4 S5 S6 S8 · inline · server module `conversaciones`: create, list (unread, hidden rule), thread (paginated), send (limit), mark read, delete-for-me · commit: dc90007 (18 tests; suite 345 green)
+- [x] T3 S9 · inline · notification to the other participant, one unread per conversation, + push · commit: dcbded2 (10 tests; suite 355 green). Assumption A1: the push goes out only when the notification is created, not on every message of a burst.
 - [ ] T4 S10 · inline · client: service, `/mensajes` page, thread, polling · commit: -
 - [ ] T5 S10 · inline · client entry points (court card, my bookings, owner bookings, menu) · commit: -
 - [ ] T6 · inline · docs, pending list update, close · commit: -

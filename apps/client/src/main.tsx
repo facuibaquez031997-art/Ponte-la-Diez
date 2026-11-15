@@ -13,6 +13,7 @@ import OwnerCanchasPage from './pages/Owner/OwnerCanchasPage'
 import OwnerHorariosPage from './pages/Owner/OwnerHorariosPage'
 import OwnerReservasPage from './pages/Owner/OwnerReservasPage'
 import HomePage from './pages/Home/HomePage'
+import MensajesPage from './pages/Mensajes/MensajesPage'
 import ProfilePage from './pages/Perfil/ProfilePage'
 import MisReservasPage from './pages/Reservas/MisReservasPage'
 import ReservaResultadoPage from './pages/Reservas/ReservaResultadoPage'
@@ -31,6 +32,8 @@ const router = createBrowserRouter([
           { path: 'perfil', element: <ProfilePage /> },
           { path: 'convocatorias', element: <ConvocatoriasPage /> },
           { path: 'contactos', element: <ContactosPage /> },
+          { path: 'mensajes', element: <MensajesPage /> },
+          { path: 'mensajes/:id', element: <MensajesPage /> },
         ],
       },
       {
