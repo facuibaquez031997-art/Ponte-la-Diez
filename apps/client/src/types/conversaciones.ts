@@ -1,6 +1,16 @@
 export interface ChatParticipant {
   nombre: string
   avatarUrl: string | null
+  /** The app is open for this person right now. */
+  conectado: boolean
+}
+
+/** What an open thread asks every couple of seconds. */
+export interface Pulso {
+  conectado: boolean
+  escribiendo: boolean
+  /** When the last message arrived: a change tells the thread to read the new ones. */
+  ultimoMensajeAt: string | null
 }
 
 export interface TurnoBanner {
@@ -23,6 +33,8 @@ export interface ConversacionHeader {
 export interface Conversacion extends ConversacionHeader {
   ultimoMensaje: { cuerpo: string; createdAt: string; propio: boolean } | null
   noLeidos: number
+  /** The other person is typing in this conversation right now. */
+  escribiendo: boolean
 }
 
 /** A slot the owner offered in a message, with whether the player can still book it. */

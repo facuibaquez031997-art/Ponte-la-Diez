@@ -3,6 +3,7 @@ import type {
   Conversacion,
   CreateConversacionInput,
   Mensaje,
+  Pulso,
   Thread,
 } from '../types/conversaciones'
 
@@ -20,6 +21,10 @@ export const conversacionesService = {
     api
       .post<Mensaje>(`/conversaciones/${id}/mensajes`, { cuerpo, ofertaTurnoId })
       .then((r) => r.data),
+  pulse: (id: string) => api.get<Pulso>(`/conversaciones/${id}/pulso`).then((r) => r.data),
+  typing: (id: string) => api.post(`/conversaciones/${id}/escribiendo`).then(() => undefined),
+  /** The app is open: the other people see this user as connected. */
+  heartbeat: () => api.post('/presencia').then(() => undefined),
   markRead: (id: string) => api.post(`/conversaciones/${id}/leida`).then(() => undefined),
   remove: (id: string) => api.delete(`/conversaciones/${id}`).then(() => undefined),
 }

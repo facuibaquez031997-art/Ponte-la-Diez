@@ -23,6 +23,8 @@ interface ChatThreadProps {
   onBack: () => void
 }
 
+const TYPING_SIGNAL_EVERY_MS = 2_500
+
 const BOOKING_LINK: Record<Role, string> = { PLAYER: '/reservas', OWNER: '/dueno/reservas' }
 
 // Nobody loses a chat by deleting it: for the player and for the owner alike, clearing only empties
@@ -107,6 +109,7 @@ const ChatThread = ({ id, rol, onChanged, onBack }: ChatThreadProps) => {
     send,
     loadOlder,
     reload,
+    pulso,
   } = useThread(id, onChanged)
   const [draft, setDraft] = useState('')
   const [agendaOpen, setAgendaOpen] = useState(false)
@@ -117,11 +120,22 @@ const ChatThread = ({ id, rol, onChanged, onBack }: ChatThreadProps) => {
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const lastTypingSent = useRef(0)
   const lastId = mensajes.at(-1)?.id
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: 'end' })
   }, [lastId])
+
+  const handleDraftChange = (value: string) => {
+    setDraft(value)
+    // Tell the other side that someone is typing, at most every couple of seconds.
+    const now = Date.now()
+    if (value.trim() && now - lastTypingSent.current > TYPING_SIGNAL_EVERY_MS) {
+      lastTypingSent.current = now
+      conversacionesService.typing(id).catch(() => undefined)
+    }
+  }
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
@@ -176,6 +190,9 @@ const ChatThread = ({ id, rol, onChanged, onBack }: ChatThreadProps) => {
   }
 
   const overLimit = draft.length > MAX_MENSAJE_LENGTH
+  // The pulse is fresher than the header read, which only changes every few seconds.
+  const conectado = pulso?.conectado ?? conversacion.otro.conectado
+  const escribiendo = pulso?.escribiendo ?? false
 
   return (
     <section className="flex min-h-[740px] flex-1 flex-col bg-surface-bright">
@@ -195,13 +212,21 @@ const ChatThread = ({ id, rol, onChanged, onBack }: ChatThreadProps) => {
             nombre={chatTitle(conversacion, rol)}
             avatarUrl={rol === 'PLAYER' ? null : conversacion.otro.avatarUrl}
             className="h-11 w-11"
+            conectado={conectado}
           />
           <div className="min-w-0">
             <h2 className="truncate text-lg font-bold leading-tight text-primary-container">
               {chatTitle(conversacion, rol)}
             </h2>
             <p className="truncate text-xs text-on-surface-variant">
-              {chatSubtitle(conversacion, rol)}
+              {chatSubtitle(conversacion, rol)} ·{' '}
+              {escribiendo ? (
+                <span className="font-semibold italic text-secondary">Escribiendo...</span>
+              ) : conectado ? (
+                'Conectado'
+              ) : (
+                'No conectado'
+              )}
             </p>
           </div>
         </div>
@@ -319,6 +344,16 @@ const ChatThread = ({ id, rol, onChanged, onBack }: ChatThreadProps) => {
             </div>
           )
         })}
+        {escribiendo && (
+          <div className="flex flex-col items-start">
+            <p
+              role="status"
+              className="animate-pulse rounded-2xl rounded-tl-md bg-surface-container-lowest px-4 py-2 text-sm italic text-on-surface-variant shadow-sm"
+            >
+              Escribiendo...
+            </p>
+          </div>
+        )}
         <div ref={bottomRef} />
       </div>
 
@@ -357,7 +392,7 @@ const ChatThread = ({ id, rol, onChanged, onBack }: ChatThreadProps) => {
         <div className="flex items-center gap-2">
           <input
             value={draft}
-            onChange={(event) => setDraft(event.target.value)}
+            onChange={(event) => handleDraftChange(event.target.value)}
             placeholder="Escribí un mensaje..."
             aria-label="Mensaje"
             autoComplete="off"

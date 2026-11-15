@@ -31,6 +31,7 @@ const ConversacionItem = ({ conversacion, rol, active, onSelect }: ConversacionI
         nombre={chatTitle(conversacion, rol)}
         avatarUrl={rol === 'PLAYER' ? null : conversacion.otro.avatarUrl}
         className="h-12 w-12"
+        conectado={conversacion.otro.conectado}
       />
       <div className="min-w-0 flex-1">
         <div className="mb-0.5 flex items-center justify-between gap-1">
@@ -48,7 +49,9 @@ const ConversacionItem = ({ conversacion, rol, active, onSelect }: ConversacionI
         <p className="mb-1 truncate text-xs text-on-surface-variant">
           {chatSubtitle(conversacion, rol)}
         </p>
-        {ultimoMensaje ? (
+        {conversacion.escribiendo ? (
+          <p className="truncate text-xs font-semibold italic text-secondary">Escribiendo...</p>
+        ) : ultimoMensaje ? (
           <p
             className={`truncate text-xs ${unread ? 'font-semibold text-on-surface' : 'text-on-surface-variant'}`}
           >

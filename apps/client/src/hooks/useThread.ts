@@ -2,9 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { isAxiosError } from 'axios'
 import { getAuthErrorMessage } from '../pages/Auth/authError'
 import { conversacionesService } from '../services/conversaciones.service'
-import type { ConversacionHeader, Mensaje } from '../types/conversaciones'
+import type { ConversacionHeader, Mensaje, Pulso } from '../types/conversaciones'
 
-const POLL_INTERVAL_MS = 5_000
+// The light pulse (connected, typing, did a message arrive) is asked often so "Escribiendo..."
+// feels immediate; the messages are read only when the pulse says something arrived.
+const PULSE_INTERVAL_MS = 2_000
+// Even without news, read them now and then: an offered slot can be taken without any message.
+const FULL_RELOAD_EVERY_PULSES = 5
 
 interface ThreadState {
   conversacion: ConversacionHeader | null
@@ -26,14 +30,18 @@ const EMPTY: ThreadState = {
 }
 
 /**
- * One open conversation: polls every few seconds while it is mounted and marks it as read when
- * the other side wrote something new. `onRead` lets the inbox refresh its unread counters.
+ * One open conversation: asks for the pulse every couple of seconds while it is mounted, reads
+ * the messages when a new one arrived, and marks it as read when the other side wrote something.
+ * `onRead` lets the inbox refresh its unread counters.
  */
 export const useThread = (id: string, onRead: () => void) => {
   const [state, setState] = useState<ThreadState>(EMPTY)
+  const [pulso, setPulso] = useState<Pulso | null>(null)
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
   const lastReadId = useRef<string | null>(null)
+  const lastPulseMessageAt = useRef<string | null | undefined>(undefined)
+  const pulses = useRef(0)
   const onReadRef = useRef(onRead)
 
   useEffect(() => {
@@ -45,7 +53,7 @@ export const useThread = (id: string, onRead: () => void) => {
       const thread = await conversacionesService.thread(id)
       setState((current) => {
         // Keep the older pages the user already loaded; the poll only brings the latest page.
-        // An empty latest page means there is nothing to show (for example the owner just
+        // An empty latest page means there is nothing to show (for example the user just
         // cleared the chat), so nothing from before may stay on screen.
         const firstOfPage = thread.mensajes[0]?.createdAt
         const older = firstOfPage ? current.mensajes.filter((m) => m.createdAt < firstOfPage) : []
@@ -75,18 +83,38 @@ export const useThread = (id: string, onRead: () => void) => {
     }
   }, [id])
 
+  const pulse = useCallback(async () => {
+    try {
+      const next = await conversacionesService.pulse(id)
+      setPulso(next)
+      pulses.current += 1
+      const arrived =
+        lastPulseMessageAt.current !== undefined &&
+        lastPulseMessageAt.current !== next.ultimoMensajeAt
+      lastPulseMessageAt.current = next.ultimoMensajeAt
+      if (arrived || pulses.current % FULL_RELOAD_EVERY_PULSES === 0) await reload()
+    } catch (err) {
+      // A missed pulse is not worth an error on screen: the next one will tell. A conversation
+      // that disappeared is shown by the next full read.
+      if (isAxiosError(err) && err.response?.status === 404) await reload()
+    }
+  }, [id, reload])
+
   useEffect(() => {
     lastReadId.current = null
+    lastPulseMessageAt.current = undefined
+    pulses.current = 0
     const first = window.setTimeout(() => {
       setState(EMPTY)
+      setPulso(null)
       void reload()
     }, 0)
-    const timer = window.setInterval(reload, POLL_INTERVAL_MS)
+    const timer = window.setInterval(pulse, PULSE_INTERVAL_MS)
     return () => {
       window.clearTimeout(first)
       window.clearInterval(timer)
     }
-  }, [reload])
+  }, [reload, pulse])
 
   const send = useCallback(
     async (cuerpo: string, ofertaTurnoId?: string): Promise<boolean> => {
@@ -122,5 +150,5 @@ export const useThread = (id: string, onRead: () => void) => {
     }
   }, [id, state.mensajes])
 
-  return { ...state, sending, sendError, send, loadOlder, reload }
+  return { ...state, pulso, sending, sendError, send, loadOlder, reload }
 }

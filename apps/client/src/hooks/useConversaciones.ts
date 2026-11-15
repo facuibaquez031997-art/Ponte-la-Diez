@@ -3,7 +3,8 @@ import { getAuthErrorMessage } from '../pages/Auth/authError'
 import { conversacionesService } from '../services/conversaciones.service'
 import type { Conversacion } from '../types/conversaciones'
 
-const POLL_INTERVAL_MS = 30_000
+// Short enough for the connected dots and "Escribiendo..." of the inbox to feel alive.
+const POLL_INTERVAL_MS = 10_000
 
 interface ConversacionesState {
   conversaciones: Conversacion[]
