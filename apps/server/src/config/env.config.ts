@@ -56,6 +56,22 @@ export class EnvironmentVariables {
 
   @IsOptional()
   @IsString()
+  CLIENT_URL?: string
+
+  @IsOptional()
+  @IsString()
+  MP_ACCESS_TOKEN?: string
+
+  @IsOptional()
+  @IsString()
+  MP_WEBHOOK_SECRET?: string
+
+  @IsOptional()
+  @IsString()
+  MP_NOTIFICATION_URL?: string
+
+  @IsOptional()
+  @IsString()
   VAPID_PUBLIC_KEY?: string
 
   @IsOptional()

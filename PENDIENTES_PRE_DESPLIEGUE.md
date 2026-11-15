@@ -37,6 +37,7 @@ Estados: ⏳ Pendiente · ✅ Resuelto · ➖ Aceptado como está (anotar motivo
 | 29 | 2 - Turnos | El filtro `fecha` de `GET /canchas/:id/turnos` acepta años menores a 0100 (por ejemplo `0050-01-01`) y devuelve lista vacía en vez de 400; es cosmético, pero conviene validar un rango de años razonable | ⏳ |
 | 30 | 3 - Reservas | Una reserva sin pagar libera el turno a los 15 minutos (`HOLD_MS`). Si un jugador paga en Mercado Pago justo después de que venza, el pago aprobado llega con el turno ya liberado y quizás tomado por otro: definir qué pasa (reembolso automático o aviso al dueño) y si 15 minutos es el tiempo correcto para el negocio | ⏳ |
 | 31 | 3 - Reservas | Las reservas vencidas se liberan al consultar disponibilidad, al reservar o al abrir "Mis reservas" (no hay tarea programada). Si una cancha no se consulta, su turno vencido sigue oculto hasta la próxima consulta; evaluar un cron o una cola cuando haya tráfico real | ⏳ |
+| 32 | 3 - Pagos | Antes de publicar: usar el `MP_ACCESS_TOKEN` de producción (hoy el de desarrollo), cargar `MP_WEBHOOK_SECRET`, `MP_NOTIFICATION_URL` (https público de `/api/pagos/webhook`) y `CLIENT_URL` con https como variables del hosting; con `CLIENT_URL` https se activa el regreso automático desde Mercado Pago. Además, cada pedido de pago crea una preferencia nueva (la anterior queda sin uso hasta que vence): guardar el link si se quiere reusar | ⏳ |
 
 ---
 
