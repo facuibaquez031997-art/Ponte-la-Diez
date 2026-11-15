@@ -1,6 +1,6 @@
 # Chat con el dueño, colgado de la reserva
 
-**Estado:** solo diseño. No hay código. Se construye como feature aparte, después de cerrar los pagos.
+**Estado:** construido en la rama `feat/chat-por-reserva` (seguimiento en `odd/tasks/chat-por-reserva.md`). Lo que difiere del diseño original se marca como *Implementado así*.
 
 **Origen** (palabras del programador): *"que el usuario tenga la posibilidad de enviar un mensaje, de poder comunicarse con el dueño de cancha seria bueno para terminar de eleguir el horario concretamente"* y *"no deberian de ser automaticas solamente, tiene que tener la opcion de estar comunicandose con el dueño de la cancha que se que esta como pendiente tambien"*. Decisión: *"dejemos lo del chat con el dueño aparte diseñandolo ya colgado en la reserva"*.
 
@@ -55,8 +55,10 @@ model Mensaje {
 
 | Método y ruta | Quién | Qué hace |
 |---|---|---|
-| `POST /reservas/:id/conversacion` | jugador o dueño de esa reserva | crea la conversación o devuelve la que ya existe |
-| `GET /conversaciones` | jugador o dueño | sus conversaciones, con último mensaje y no leídos |
+| `POST /conversaciones` (`canchaId`, `reservaId` opcional) | solo jugador | crea la conversación o devuelve la que ya existe. *Implementado así*: el dueño no inicia nunca, y la reserva es opcional |
+| `GET /conversaciones` | jugador o dueño | sus conversaciones, con último mensaje y no leídos (sin las ocultas ni las vacías) |
+| `GET /conversaciones/no-leidas` | jugador o dueño | total de mensajes sin leer, para la campanita |
+| `DELETE /conversaciones/:id` | los dos participantes | *Implementado así*: oculta el chat solo para quien lo elimina |
 | `GET /conversaciones/:id/mensajes` | los dos participantes | el hilo, con paginado |
 | `POST /conversaciones/:id/mensajes` | los dos participantes | envía un mensaje (`cuerpo`) |
 | `POST /conversaciones/:id/leida` | los dos participantes | marca el hilo como leído |
@@ -71,7 +73,7 @@ Quien no participa recibe 404, no 403, para no revelar que la conversación exis
 ## Pantallas
 
 - Ruta `/mensajes`: lista a la izquierda, hilo a la derecha, como Stitch.
-- Puntos de entrada: botón **"Hablar con el dueño"** en cada tarjeta de "Mis reservas" (también en las pendientes), botón **"Responder"** en cada fila de las reservas del dueño, y el enlace **Mensajes** del menú, que hoy apunta a `#`.
+- Puntos de entrada: botón **"Hablar con el dueño"** en cada tarjeta de "Mis reservas" (también en las pendientes), botón **"Consultar al dueño"** en la tarjeta de cada cancha (sin reserva), botón **"Responder"** en la fila de las reservas del dueño (solo si el jugador ya escribió), y el enlace **Mensajes** del menú (jugador y dueño).
 - Banner del turno con el estado de la reserva y los montos (pagado y a cobrar en la cancha).
 
 ## Seguridad y abuso

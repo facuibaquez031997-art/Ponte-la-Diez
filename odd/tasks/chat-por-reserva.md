@@ -19,9 +19,9 @@ Branch: feat/chat-por-reserva (from feat/pagos-mercadopago, because it needs `Re
 - [x] T1 S2 S3 S4 S6 S7 · inline · Prisma `Conversacion` + `Mensaje` (index `[conversacionId, createdAt]`) and migration · commit: 8ef350c
 - [x] T2 S2 S3 S4 S5 S6 S8 · inline · server module `conversaciones`: create, list (unread, hidden rule), thread (paginated), send (limit), mark read, delete-for-me · commit: dc90007 (18 tests; suite 345 green)
 - [x] T3 S9 · inline · notification to the other participant, one unread per conversation, + push · commit: dcbded2 (10 tests; suite 355 green). Assumption A1: the push goes out only when the notification is created, not on every message of a burst.
-- [ ] T4 S10 · inline · client: service, `/mensajes` page, thread, polling · commit: -
-- [ ] T5 S10 · inline · client entry points (court card, my bookings, owner bookings, menu) · commit: -
-- [ ] T6 · inline · docs, pending list update, close · commit: -
+- [x] T4 S10 · inline · client: service, `/mensajes` page, thread, polling · commit: f41b98e (tsc, eslint and vite build clean; the client has no test runner, see pending #41)
+- [x] T5 S10 · inline · client entry points (court card, my bookings, owner bookings, menu) · commit: 52b0fd7 (server suite 357 green; adds `conversacionId` to the owner bookings list, an additive field)
+- [x] T6 · inline · live check against the real database (31/31, script not committed), docs, pending list #33/#34 updated and #45-#48 added · commit: see `git log` "docs(chat)"
 
 ## Log
 
@@ -30,3 +30,6 @@ Branch: feat/chat-por-reserva (from feat/pagos-mercadopago, because it needs `Re
 - L3 2026-11-15 user, verbatim: "cuando el dueño elimine su chat que se oculte solo en su bandeja. y lo mismo para el jugador, si quiere eliminar el chat que lo elimine y no se elimine para el dueño en ese caso. osea el eliminar el chat ya sea el dueño o el jugador solo se elimina para quien decida eliminarlo."
 - L4 2026-11-15 user, verbatim: "si no se elimino nada tiene que aparecer con todo el historial, si se elimino el chat debe aparecer con los mensajes posteriores a la eliminacion". And on retention: "si esa regla sirve" (S7).
 - 2026-11-15: branch cut from feat/pagos-mercadopago (main does not have `Reserva` yet: the payments chain is not merged).
+- 2026-11-15 verification: server suite 357 tests green; client `tsc -b`, `eslint src` and `vite build` clean; live check against the real database through the HTTP API with throwaway users (31/31: owner cannot start (403), start is idempotent, empty chats not listed, trim/1000/blank, unread counts per side, one unread notification for two messages, 404 to strangers on read/write/delete, individual delete, only-newer messages after a delete, 400 on bad ids, 401 without token). The throwaway data was removed (0 leftovers). The rate limit (20/min) is covered by unit tests only.
+- 2026-11-15 not verified: the client screens were never opened in a browser (no test runner, and a dev server of the user already holds port 3000 with an older build); the push on the first message was not exercised (VAPID keys are not configured in development).
+- Risk: item 3 (adds the `conversacionId` field to `GET /reservas/owner`, additive; nothing consumed it before). Items 1, 2, 4, 5 do not apply: only new tables and a new nullable column, no change to existing data.
