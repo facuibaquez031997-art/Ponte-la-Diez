@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useStartConversacion } from '../../hooks/useStartConversacion'
 import type { Cancha, TurnoLibre } from '../../types/canchas'
 import { formatSlotTime } from '../../utils/dates'
 import { formatPesos } from '../../utils/money'
@@ -20,6 +21,7 @@ const VenueCard = ({ cancha, slots, fecha, canBook, onSlotTaken }: VenueCardProp
   const [photoIndex, setPhotoIndex] = useState(0)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [booking, setBooking] = useState(false)
+  const { startingKey, error: chatError, start } = useStartConversacion()
   const { fotos } = cancha
   const current = fotos[photoIndex] ?? fotos[0]
   // A slot that disappeared (other day, already taken) is no longer selected.
@@ -166,6 +168,27 @@ const VenueCard = ({ cancha, slots, fecha, canBook, onSlotTaken }: VenueCardProp
               bolt
             </span>
           </button>
+        )}
+
+        {canBook && (
+          <div>
+            <button
+              type="button"
+              disabled={startingKey !== null}
+              onClick={() => start({ canchaId: cancha.id })}
+              className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-surface-container text-sm font-bold text-on-surface transition-all hover:bg-surface-container-high active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <span aria-hidden="true" className="material-symbols-outlined text-[20px]">
+                chat
+              </span>
+              {startingKey !== null ? 'Abriendo el chat...' : 'Consultar al dueño'}
+            </button>
+            {chatError && (
+              <p role="alert" className="mt-2 text-xs text-error">
+                {chatError}
+              </p>
+            )}
+          </div>
         )}
       </div>
 

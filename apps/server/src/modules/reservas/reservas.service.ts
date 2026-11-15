@@ -56,6 +56,7 @@ const reservaInclude = {
 const ownerInclude = {
   ...reservaInclude,
   user: { select: { nombre: true, avatarUrl: true } },
+  conversacion: { select: { id: true, ultimoMensajeAt: true } },
 } as const
 
 function toView(reserva: StoredReserva): ReservaView {
@@ -78,11 +79,14 @@ export interface OwnerReservaView extends ReservaView {
   jugador: { nombre: string; avatarUrl: string | null }
   /** When an unpaid booking stops holding the slot, or null once it is not waiting anymore. */
   expiraEl: Date | null
+  /** The chat the player opened for this booking, once it has messages; the owner never starts one. */
+  conversacionId: string | null
 }
 
 type StoredOwnerReserva = StoredReserva & {
   createdAt: Date
   user: { nombre: string; avatarUrl: string | null }
+  conversacion?: { id: string; ultimoMensajeAt: Date | null } | null
 }
 
 function toOwnerView(reserva: StoredOwnerReserva): OwnerReservaView {
@@ -91,6 +95,7 @@ function toOwnerView(reserva: StoredOwnerReserva): OwnerReservaView {
     // Only these two fields leave the server, whatever else the query brought.
     jugador: { nombre: reserva.user.nombre, avatarUrl: reserva.user.avatarUrl },
     expiraEl: reserva.estado === 'PENDING' ? new Date(reserva.createdAt.getTime() + HOLD_MS) : null,
+    conversacionId: reserva.conversacion?.ultimoMensajeAt ? reserva.conversacion.id : null,
   }
 }
 

@@ -39,6 +39,8 @@ export interface OwnerReserva extends Reserva {
   jugador: { nombre: string; avatarUrl: string | null }
   /** When an unpaid booking stops holding the slot, or null once it is not waiting anymore. */
   expiraEl: string | null
+  /** The chat the player opened for this booking, once it has messages; the owner never starts one. */
+  conversacionId: string | null
 }
 
 export type MotivoCierre = 'VENCIDA' | 'CANCELADA_DUENO'

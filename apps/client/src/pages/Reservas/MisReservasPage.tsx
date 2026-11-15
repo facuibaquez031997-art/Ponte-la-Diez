@@ -3,12 +3,14 @@ import { Link } from 'react-router-dom'
 import ReservaCard from '../../components/stitch/ReservaCard'
 import { useMisReservas } from '../../hooks/useMisReservas'
 import { usePayReserva } from '../../hooks/usePayReserva'
+import { useStartConversacion } from '../../hooks/useStartConversacion'
 
 const containerClass = 'mx-auto w-full max-w-[1280px] px-4 md:px-8 lg:px-12'
 
 const MisReservasPage = () => {
   const { reservas, loading, error } = useMisReservas()
   const { payingId, payError, pay } = usePayReserva()
+  const { startingKey, error: chatError, start } = useStartConversacion()
   const [now] = useState(() => Date.now())
 
   const upcoming = reservas
@@ -31,12 +33,12 @@ const MisReservasPage = () => {
           </h1>
         </div>
 
-        {(error || payError) && (
+        {(error || payError || chatError) && (
           <p
             role="alert"
             className="mb-4 rounded-xl bg-error-container px-4 py-3 text-sm text-on-error-container"
           >
-            {error ?? payError}
+            {error ?? payError ?? chatError}
           </p>
         )}
 
@@ -64,6 +66,8 @@ const MisReservasPage = () => {
                   reserva={reserva}
                   onPay={pay}
                   paying={payingId === reserva.id}
+                  onContact={(r) => start({ canchaId: r.cancha.id, reservaId: r.id })}
+                  contacting={startingKey === reserva.id}
                 />
               ))}
             </div>

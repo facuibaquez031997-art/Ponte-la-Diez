@@ -304,6 +304,33 @@ describe('ReservasService.listForOwner', () => {
     expect(JSON.stringify(view)).not.toContain('1155')
   })
 
+  it('points to the chat of the booking only once the player wrote in it', async () => {
+    const prisma = makePrisma()
+    prisma.reserva.findMany.mockResolvedValue([
+      { ...ownerBooking(null), conversacion: { id: 'conv-1', ultimoMensajeAt: now } },
+      {
+        ...ownerBooking(null),
+        id: 'r2',
+        conversacion: { id: 'conv-2', ultimoMensajeAt: null },
+      },
+      { ...ownerBooking(null), id: 'r3', conversacion: null },
+    ])
+    const views = await new ReservasService(
+      prisma as never,
+      makeNotifications() as never
+    ).listForOwner('o1', now)
+    expect(views.map((v) => v.conversacionId)).toEqual(['conv-1', null, null])
+  })
+
+  it('brings the chat id of the booking and nothing else of it', async () => {
+    const prisma = makePrisma()
+    await new ReservasService(prisma as never, makeNotifications() as never).listForOwner('o1', now)
+    const call = prisma.reserva.findMany.mock.calls.at(-1)?.[0] as {
+      include: { conversacion: unknown }
+    }
+    expect(call.include.conversacion).toEqual({ select: { id: true, ultimoMensajeAt: true } })
+  })
+
   it('says when an unpaid booking stops holding the slot', async () => {
     const prisma = makePrisma()
     const createdAt = new Date('2026-11-14T14:55:00.000Z')

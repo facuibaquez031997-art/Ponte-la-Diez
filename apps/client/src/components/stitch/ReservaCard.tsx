@@ -7,6 +7,9 @@ interface ReservaCardProps {
   /** Shown for a booking that still waits for its payment. */
   onPay?: (reserva: Reserva) => void
   paying?: boolean
+  /** Opens the chat with the owner of the court about this booking. */
+  onContact?: (reserva: Reserva) => void
+  contacting?: boolean
 }
 
 const badgeText = (reserva: Reserva): string => {
@@ -19,7 +22,13 @@ const badgeText = (reserva: Reserva): string => {
 }
 
 // Same look as the "Próxima fecha confirmada" card of the Stitch design for a confirmed turn.
-const ReservaCard = ({ reserva, onPay, paying = false }: ReservaCardProps) => {
+const ReservaCard = ({
+  reserva,
+  onPay,
+  paying = false,
+  onContact,
+  contacting = false,
+}: ReservaCardProps) => {
   const confirmed = reserva.estado === 'CONFIRMED'
   const canPay = reserva.estado === 'PENDING' && reserva.montoACobrar !== null && onPay
 
@@ -108,6 +117,24 @@ const ReservaCard = ({ reserva, onPay, paying = false }: ReservaCardProps) => {
           <span aria-hidden="true" className="material-symbols-outlined text-[20px]">
             bolt
           </span>
+        </button>
+      )}
+
+      {onContact && reserva.estado !== 'CANCELLED' && (
+        <button
+          type="button"
+          disabled={contacting}
+          onClick={() => onContact(reserva)}
+          className={`mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl text-sm font-bold transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 ${
+            confirmed
+              ? 'bg-secondary-container text-on-secondary-fixed hover:bg-secondary-fixed-dim'
+              : 'bg-surface-container text-on-surface hover:bg-surface-container-high'
+          }`}
+        >
+          <span aria-hidden="true" className="material-symbols-outlined text-[20px]">
+            chat
+          </span>
+          {contacting ? 'Abriendo el chat...' : 'Hablar con el dueño'}
         </button>
       )}
     </article>

@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import type { OwnerReserva } from '../../types/reservas'
 import { formatSlotShortDate, formatSlotTime } from '../../utils/dates'
 import { formatPesos } from '../../utils/money'
@@ -81,6 +82,17 @@ const OwnerReservaRow = ({ reserva, onCancel, disabled = false }: OwnerReservaRo
         >
           {chip.label}
         </span>
+        {reserva.conversacionId && (
+          <Link
+            to={`/mensajes/${reserva.conversacionId}`}
+            className="flex shrink-0 items-center gap-1 rounded-xl bg-secondary-container px-3 py-2 text-xs font-semibold text-on-secondary-fixed transition-all hover:bg-secondary-fixed-dim active:scale-[0.98]"
+          >
+            <span aria-hidden="true" className="material-symbols-outlined text-[16px]">
+              chat
+            </span>
+            Responder
+          </Link>
+        )}
         {onCancel && (
           <button
             type="button"
