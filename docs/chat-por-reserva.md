@@ -58,7 +58,10 @@ model Mensaje {
 | `POST /conversaciones` (`canchaId`, `reservaId` opcional) | solo jugador | crea la conversación o devuelve la que ya existe. *Implementado así*: el dueño no inicia nunca, y la reserva es opcional |
 | `GET /conversaciones` | jugador o dueño | sus conversaciones, con último mensaje y no leídos (sin las ocultas ni las vacías) |
 | `GET /conversaciones/no-leidas` | jugador o dueño | total de mensajes sin leer, para la campanita |
-| `DELETE /conversaciones/:id` | los dos participantes | *Implementado así*: oculta el chat solo para quien lo elimina |
+| `DELETE /conversaciones/:id` | los dos participantes | *Implementado así*: vacía el chat solo para quien lo elimina; el chat sigue en su bandeja |
+| `GET /conversaciones/:id/pulso` | los dos participantes | *Agregado*: si el otro está conectado y escribiendo, y cuándo llegó el último mensaje |
+| `POST /conversaciones/:id/escribiendo` | los dos participantes | *Agregado*: avisa que se está escribiendo |
+| `POST /presencia` | cualquier usuario | *Agregado*: latido de la app abierta (cada 20 s) |
 | `GET /conversaciones/:id/mensajes` | los dos participantes | el hilo, con paginado |
 | `POST /conversaciones/:id/mensajes` | los dos participantes | envía un mensaje (`cuerpo`) |
 | `POST /conversaciones/:id/leida` | los dos participantes | marca el hilo como leído |
@@ -92,7 +95,7 @@ Acciones rápidas de Stitch (enviar comprobante, pedir ubicación, avisar que ll
 
 1. **Se puede escribir antes de reservar.** Botón "Consultar al dueño" en la tarjeta de la cancha, con una conversación sin reserva.
 2. **Solo el jugador inicia la conversación.** El dueño nunca la inicia: responde en las que el jugador abrió.
-3. **Eliminar el chat es individual.** El jugador lo oculta de su bandeja (`jugadorEliminoAt`). **El dueño nunca pierde el chat de su bandeja:** al "vaciarlo" solo se borra su contenido (`duenoEliminoAt`) y la conversación queda listada como "Chat vaciado", para no perder una consulta de un turno por accidente. En los dos casos el otro participante conserva el hilo intacto.
+3. **Eliminar el chat es individual.** **Ni el jugador ni el dueño pierden el chat de su bandeja:** al "vaciarlo" solo se borra su contenido (`jugadorEliminoAt` o `duenoEliminoAt`) y la conversación queda listada como "Chat vaciado", para no perder una consulta de un turno por accidente. El otro participante conserva el hilo intacto.
 
 4. **Si el otro escribe en un chat que eliminaste, reaparece solo con los mensajes posteriores a la eliminación** (`createdAt > eliminoAt`). Si nunca lo eliminaste, ves todo el historial. El chat está oculto mientras `ultimoMensajeAt <= eliminoAt`.
 
