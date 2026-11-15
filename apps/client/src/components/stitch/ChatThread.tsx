@@ -4,13 +4,15 @@ import { getAuthErrorMessage } from '../../pages/Auth/authError'
 import { useThread } from '../../hooks/useThread'
 import { conversacionesService } from '../../services/conversaciones.service'
 import type { Role } from '../../types/auth'
-import { MAX_MENSAJE_LENGTH, type TurnoBanner } from '../../types/conversaciones'
+import { MAX_MENSAJE_LENGTH, type Oferta, type TurnoBanner } from '../../types/conversaciones'
 import { chatSubtitle, chatTitle } from '../../utils/chat'
 import { chatDayKey, formatChatDay, formatSlotShortDate, formatSlotTime } from '../../utils/dates'
 import { formatPesos } from '../../utils/money'
 import ConfirmDialog from '../common/ConfirmDialog'
+import BookingDialog from '../common/BookingDialog'
 import ChatAgendaPanel from './ChatAgendaPanel'
 import ChatAvatar from './ChatAvatar'
+import OfertaCard from './OfertaCard'
 
 interface ChatThreadProps {
   id: string
@@ -108,6 +110,10 @@ const ChatThread = ({ id, rol, onChanged, onBack }: ChatThreadProps) => {
   } = useThread(id, onChanged)
   const [draft, setDraft] = useState('')
   const [agendaOpen, setAgendaOpen] = useState(false)
+  // The slot attached to the message being written (one per message), and the text that came with it.
+  const [offer, setOffer] = useState<{ turnoId: string; label: string; text: string } | null>(null)
+  // The offer the player is booking right now.
+  const [booking, setBooking] = useState<Oferta | null>(null)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -121,7 +127,17 @@ const ChatThread = ({ id, rol, onChanged, onBack }: ChatThreadProps) => {
     event.preventDefault()
     const text = draft.trim()
     if (!text || sending) return
-    if (await send(text)) setDraft('')
+    if (await send(text, offer?.turnoId)) {
+      setDraft('')
+      setOffer(null)
+    }
+  }
+
+  const handleOffer = (next: { turnoId: string; text: string; label: string }) => {
+    // Keep what the owner already wrote; only a draft that is empty or was the previous ready
+    // answer gets replaced by the one for this slot.
+    setDraft((current) => (current === '' || current === offer?.text ? next.text : current))
+    setOffer(next)
   }
 
   const handleDelete = async () => {
@@ -240,10 +256,7 @@ const ChatThread = ({ id, rol, onChanged, onBack }: ChatThreadProps) => {
       )}
 
       {rol === 'OWNER' && agendaOpen && (
-        <ChatAgendaPanel
-          canchaId={conversacion.cancha.id}
-          onOffer={(text) => setDraft((current) => (current ? `${current} ${text}` : text))}
-        />
+        <ChatAgendaPanel canchaId={conversacion.cancha.id} onOffer={handleOffer} />
       )}
 
       <div className="flex-1 space-y-4 overflow-y-auto p-4" aria-live="polite">
@@ -287,6 +300,13 @@ const ChatThread = ({ id, rol, onChanged, onBack }: ChatThreadProps) => {
                   }`}
                 >
                   {mensaje.cuerpo}
+                  {mensaje.oferta && (
+                    <OfertaCard
+                      oferta={mensaje.oferta}
+                      propio={mensaje.propio}
+                      onBook={setBooking}
+                    />
+                  )}
                   <p
                     className={`mt-1 text-right text-label-sm ${
                       mensaje.propio ? 'text-on-primary-container' : 'text-on-surface-variant'
@@ -312,6 +332,26 @@ const ChatThread = ({ id, rol, onChanged, onBack }: ChatThreadProps) => {
             className="mb-2 rounded-xl bg-error-container px-4 py-2 text-sm text-on-error-container"
           >
             {sendError ?? deleteError ?? error}
+          </p>
+        )}
+        {offer && (
+          <p className="mb-2 flex items-center justify-between gap-2 rounded-xl bg-secondary-fixed px-3 py-2 text-xs font-semibold text-on-secondary-container">
+            <span className="flex items-center gap-1">
+              <span aria-hidden="true" className="material-symbols-outlined text-[16px]">
+                event_available
+              </span>
+              Se ofrece el turno del {offer.label}: el jugador va a ver un botón para reservarlo.
+            </span>
+            <button
+              type="button"
+              onClick={() => setOffer(null)}
+              aria-label="Quitar el horario ofrecido"
+              className="rounded-full p-1 hover:bg-secondary-container"
+            >
+              <span aria-hidden="true" className="material-symbols-outlined text-[16px]">
+                close
+              </span>
+            </button>
           </p>
         )}
         <div className="flex items-center gap-2">
@@ -351,6 +391,20 @@ const ChatThread = ({ id, rol, onChanged, onBack }: ChatThreadProps) => {
         onConfirm={handleDelete}
         onCancel={() => setConfirmingDelete(false)}
       />
+
+      {booking && (
+        <BookingDialog
+          cancha={booking.cancha}
+          slot={{ id: booking.turnoId, fechaHoraInicio: booking.fechaHoraInicio }}
+          fecha={chatDayKey(booking.fechaHoraInicio)}
+          onClose={() => setBooking(null)}
+          onSlotTaken={() => {
+            // Somebody booked it first: close the dialog and show the offer as not available.
+            setBooking(null)
+            void reload()
+          }}
+        />
+      )}
     </section>
   )
 }

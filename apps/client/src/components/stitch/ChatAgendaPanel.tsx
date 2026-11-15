@@ -1,15 +1,20 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAgenda } from '../../hooks/useAgenda'
-import { formatSlotDate, formatSlotTime, todayInArgentina } from '../../utils/dates'
+import {
+  formatSlotDate,
+  formatSlotShortDate,
+  formatSlotTime,
+  todayInArgentina,
+} from '../../utils/dates'
 import DayPicker from '../common/DayPicker'
 import AgendaDay from './AgendaDay'
 
 interface ChatAgendaPanelProps {
   /** The court the player asked about. */
   canchaId: string
-  /** Writes an answer in the message box of the chat. */
-  onOffer: (text: string) => void
+  /** Attaches the slot to the message being written, with a ready answer for it. */
+  onOffer: (offer: { turnoId: string; text: string; label: string }) => void
 }
 
 /**
@@ -44,9 +49,11 @@ const ChatAgendaPanel = ({ canchaId, onOffer }: ChatAgendaPanelProps) => {
           canchaId={canchaId}
           compact
           onPickSlot={(cancha, turno) =>
-            onOffer(
-              `Tengo disponible el ${formatSlotDate(turno.fechaHoraInicio)} a las ${formatSlotTime(turno.fechaHoraInicio)} hs en ${cancha.nombre}.`
-            )
+            onOffer({
+              turnoId: turno.id,
+              text: `Tengo disponible el ${formatSlotDate(turno.fechaHoraInicio)} a las ${formatSlotTime(turno.fechaHoraInicio)} hs en ${cancha.nombre}.`,
+              label: `${formatSlotShortDate(turno.fechaHoraInicio)} ${formatSlotTime(turno.fechaHoraInicio)} hs`,
+            })
           }
         />
       )}

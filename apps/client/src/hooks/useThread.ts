@@ -89,11 +89,11 @@ export const useThread = (id: string, onRead: () => void) => {
   }, [reload])
 
   const send = useCallback(
-    async (cuerpo: string): Promise<boolean> => {
+    async (cuerpo: string, ofertaTurnoId?: string): Promise<boolean> => {
       setSending(true)
       setSendError(null)
       try {
-        const mensaje = await conversacionesService.send(id, cuerpo)
+        const mensaje = await conversacionesService.send(id, cuerpo, ofertaTurnoId)
         setState((current) => ({ ...current, mensajes: [...current.mensajes, mensaje] }))
         onReadRef.current()
         return true

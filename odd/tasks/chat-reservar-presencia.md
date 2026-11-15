@@ -12,7 +12,7 @@ Branch: feat/chat-reservar-presencia (from feat/agenda-dueno, because the offer 
 
 - [ ] T1 S1 · inline · server+client: the player's clear keeps the chat in the inbox, same as the owner · commit: see git log "the player clears the chat" (server 24 chat tests, tsc, eslint clean)
 - [ ] T2 S2 · inline · offers: `Mensaje.ofertaTurnoId/ofertaInicio` + migration, send with offer (owner only, FREE future slot of the court), live view of the offer, tests · commit: see git log "offer a free slot in a chat message" (9 new tests, chat suite 33 green)
-- [ ] T3 S2 · inline · client: the owner attaches the slot from the agenda panel; the player sees the card with "Reservar" and the booking dialog · commit: -
+- [ ] T3 S2 · inline · client: the owner attaches the slot from the agenda panel; the player sees the card with "Reservar" and the booking dialog · commit: see git log "Reservar button" (tsc, eslint, vite build clean)
 - [ ] T4 S3 S4 · inline · server: presence + typing in memory, heartbeat, `pulse` endpoint, tests · commit: -
 - [ ] T5 S3 S4 · inline · client: heartbeat, pulse polling, dots and "Escribiendo..." · commit: -
 - [ ] T6 · inline · live check against the real database, docs and pending list · commit: -

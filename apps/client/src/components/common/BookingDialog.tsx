@@ -9,8 +9,8 @@ import { formatLongDate, formatSlotTime } from '../../utils/dates'
 import { formatPesos } from '../../utils/money'
 
 interface BookingDialogProps {
-  cancha: Cancha
-  slot: TurnoLibre
+  cancha: Pick<Cancha, 'nombre' | 'barrio' | 'precioHora' | 'montoSena'>
+  slot: Pick<TurnoLibre, 'id' | 'fechaHoraInicio'>
   /** AAAA-MM-DD day the slot belongs to. */
   fecha: string
   onClose: () => void

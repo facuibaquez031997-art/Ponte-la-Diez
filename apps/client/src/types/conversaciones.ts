@@ -25,11 +25,21 @@ export interface Conversacion extends ConversacionHeader {
   noLeidos: number
 }
 
+/** A slot the owner offered in a message, with whether the player can still book it. */
+export interface Oferta {
+  turnoId: string
+  fechaHoraInicio: string
+  /** Still free and in the future. A booked, expired or deleted slot is not available anymore. */
+  disponible: boolean
+  cancha: { id: string; nombre: string; barrio: string; precioHora: number; montoSena: number }
+}
+
 export interface Mensaje {
   id: string
   cuerpo: string
   createdAt: string
   propio: boolean
+  oferta: Oferta | null
 }
 
 export interface Thread {

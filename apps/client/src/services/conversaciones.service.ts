@@ -16,8 +16,10 @@ export const conversacionesService = {
     api
       .get<Thread>(`/conversaciones/${id}/mensajes`, { params: before ? { before } : undefined })
       .then((r) => r.data),
-  send: (id: string, cuerpo: string) =>
-    api.post<Mensaje>(`/conversaciones/${id}/mensajes`, { cuerpo }).then((r) => r.data),
+  send: (id: string, cuerpo: string, ofertaTurnoId?: string) =>
+    api
+      .post<Mensaje>(`/conversaciones/${id}/mensajes`, { cuerpo, ofertaTurnoId })
+      .then((r) => r.data),
   markRead: (id: string) => api.post(`/conversaciones/${id}/leida`).then(() => undefined),
   remove: (id: string) => api.delete(`/conversaciones/${id}`).then(() => undefined),
 }
