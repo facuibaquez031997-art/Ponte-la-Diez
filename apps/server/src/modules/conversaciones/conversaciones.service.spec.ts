@@ -2,6 +2,7 @@ import 'reflect-metadata'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { BadRequestException, HttpException, NotFoundException } from '@nestjs/common'
 import { ConversacionesService } from './conversaciones.service.js'
+import { ONLINE_MS, PresenceService, TYPING_MS } from './presence.service.js'
 
 const PLAYER = 'player-1'
 const OWNER = 'owner-1'
@@ -218,8 +219,9 @@ const makeNotifications = () => ({
 
 const makeService = (
   reservas: Record<string, Reserva> = {},
-  notifications: ReturnType<typeof makeNotifications> = makeNotifications()
-) => new ConversacionesService(makePrisma(reservas) as never, notifications as never)
+  notifications: ReturnType<typeof makeNotifications> = makeNotifications(),
+  presence: PresenceService = new PresenceService()
+) => new ConversacionesService(makePrisma(reservas) as never, notifications as never, presence)
 
 /** The player opens a chat and writes the first message. */
 const openChat = async (service: ConversacionesService, text = 'Hola, ¿tenés turno?') => {
@@ -327,7 +329,11 @@ describe('ConversacionesService', () => {
   describe('banner', () => {
     it('says the slot is free again when the booking was released', async () => {
       const prisma = makePrisma()
-      const service = new ConversacionesService(prisma as never, makeNotifications() as never)
+      const service = new ConversacionesService(
+        prisma as never,
+        makeNotifications() as never,
+        new PresenceService()
+      )
       const { id } = await service.create(PLAYER, { canchaId: CANCHA, reservaId: 'reserva-mia' })
       await service.send(PLAYER, id, 'Hola')
       // The booking expired: the foreign key sets reservaId to null and the copy stays.
@@ -433,11 +439,116 @@ describe('ConversacionesService', () => {
     })
   })
 
+  describe('connected and typing', () => {
+    const setup = () => {
+      const presence = new PresenceService()
+      const service = makeService({}, makeNotifications(), presence)
+      return { presence, service }
+    }
+
+    it('shows the other person as disconnected until their app says it is open', async () => {
+      const { service } = setup()
+      const id = await openChat(service)
+
+      expect((await service.thread(PLAYER, id)).conversacion.otro.conectado).toBe(false)
+      expect((await service.list(PLAYER))[0]?.otro.conectado).toBe(false)
+    })
+
+    it('shows the other person as connected after their heartbeat, from both sides', async () => {
+      const { service } = setup()
+      const id = await openChat(service)
+
+      service.heartbeat(OWNER)
+
+      expect((await service.thread(PLAYER, id)).conversacion.otro.conectado).toBe(true)
+      expect((await service.list(PLAYER))[0]?.otro.conectado).toBe(true)
+      // The owner is connected, but the player is not: each one only sees the other.
+      expect((await service.thread(OWNER, id)).conversacion.otro.conectado).toBe(false)
+      service.heartbeat(PLAYER)
+      expect((await service.list(OWNER))[0]?.otro.conectado).toBe(true)
+    })
+
+    it('shows disconnected again when the heartbeats stop', async () => {
+      const { service } = setup()
+      const id = await openChat(service)
+      service.heartbeat(OWNER)
+
+      advance(ONLINE_MS / 1000 + 1)
+
+      expect((await service.thread(PLAYER, id)).conversacion.otro.conectado).toBe(false)
+    })
+
+    it('shows "typing" to the other side only, in the inbox and in the pulse', async () => {
+      const { service } = setup()
+      const id = await openChat(service)
+
+      await service.typing(OWNER, id)
+
+      expect((await service.list(PLAYER))[0]?.escribiendo).toBe(true)
+      expect((await service.pulse(PLAYER, id)).escribiendo).toBe(true)
+      expect((await service.list(OWNER))[0]?.escribiendo).toBe(false)
+      expect((await service.pulse(OWNER, id)).escribiendo).toBe(false)
+    })
+
+    it('stops showing "typing" a few seconds after the last keystroke', async () => {
+      const { service } = setup()
+      const id = await openChat(service)
+      await service.typing(OWNER, id)
+
+      advance(TYPING_MS / 1000 + 1)
+
+      expect((await service.pulse(PLAYER, id)).escribiendo).toBe(false)
+    })
+
+    it('stops showing "typing" as soon as the message is sent', async () => {
+      const { service } = setup()
+      const id = await openChat(service)
+      await service.typing(OWNER, id)
+
+      await service.send(OWNER, id, 'Sí, a las 20')
+
+      expect((await service.pulse(PLAYER, id)).escribiendo).toBe(false)
+    })
+
+    it('typing counts as being connected', async () => {
+      const { service } = setup()
+      const id = await openChat(service)
+
+      await service.typing(OWNER, id)
+
+      expect((await service.pulse(PLAYER, id)).conectado).toBe(true)
+    })
+
+    it('the pulse tells the last message time and marks the one who asks as connected', async () => {
+      const { service } = setup()
+      const id = await openChat(service)
+      const last = (await service.thread(PLAYER, id)).mensajes.at(-1)?.createdAt
+
+      const pulse = await service.pulse(OWNER, id)
+
+      expect(pulse.ultimoMensajeAt).toEqual(last)
+      // The owner asked, so the player now sees the owner as connected.
+      expect((await service.thread(PLAYER, id)).conversacion.otro.conectado).toBe(true)
+    })
+
+    it('answers 404 to a stranger for the pulse and for typing', async () => {
+      const { service } = setup()
+      const id = await openChat(service)
+
+      await expect(service.pulse(STRANGER, id)).rejects.toBeInstanceOf(NotFoundException)
+      await expect(service.typing(STRANGER, id)).rejects.toBeInstanceOf(NotFoundException)
+    })
+  })
+
   describe('offers', () => {
     const setup = () => {
       const prisma = makePrisma()
       const notifications = makeNotifications()
-      const service = new ConversacionesService(prisma as never, notifications as never)
+      const service = new ConversacionesService(
+        prisma as never,
+        notifications as never,
+        new PresenceService()
+      )
       prisma.turnos['t-free'] = { canchaId: CANCHA, estado: 'FREE', fechaHoraInicio: TURNO }
       return { prisma, notifications, service }
     }

@@ -17,6 +17,7 @@ import {
   type ConversacionView,
   ConversacionesService,
   type MensajeView,
+  type PulsoView,
   type ThreadView,
 } from './conversaciones.service.js'
 import { CreateConversacionDto } from './dto/create-conversacion.dto.js'
@@ -63,6 +64,17 @@ export class ConversacionesController {
     @Body() dto: SendMensajeDto
   ): Promise<MensajeView> {
     return this.conversaciones.send(user.id, id, dto.cuerpo, dto.ofertaTurnoId)
+  }
+
+  @Get(':id/pulso')
+  pulse(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string): Promise<PulsoView> {
+    return this.conversaciones.pulse(user.id, id)
+  }
+
+  @Post(':id/escribiendo')
+  @HttpCode(204)
+  typing(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string): Promise<void> {
+    return this.conversaciones.typing(user.id, id)
   }
 
   @Post(':id/leida')

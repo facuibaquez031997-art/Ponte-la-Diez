@@ -11,6 +11,7 @@ import { PrismaService } from '../../common/prisma/prisma.service.js'
 import { NotificationsService } from '../notifications/notifications.service.js'
 import { releaseExpiredHolds } from '../reservas/holds.js'
 import type { CreateConversacionDto } from './dto/create-conversacion.dto.js'
+import { PresenceService } from './presence.service.js'
 import { MAX_MENSAJE_LENGTH } from './dto/send-mensaje.dto.js'
 
 const MAX_MESSAGES_PER_MINUTE = 20
@@ -83,6 +84,16 @@ export interface TurnoBanner {
 interface Participant {
   nombre: string
   avatarUrl: string | null
+  /** The app is open for this person right now. */
+  conectado: boolean
+}
+
+/** What the open thread asks every couple of seconds, much lighter than reading the messages. */
+export interface PulsoView {
+  conectado: boolean
+  escribiendo: boolean
+  /** When the last message arrived: a change tells the thread to read the new ones. */
+  ultimoMensajeAt: Date | null
 }
 
 export interface ConversacionView {
@@ -93,6 +104,8 @@ export interface ConversacionView {
   turno: TurnoBanner | null
   ultimoMensaje: { cuerpo: string; createdAt: Date; propio: boolean } | null
   noLeidos: number
+  /** The other person is typing in this conversation right now. */
+  escribiendo: boolean
 }
 
 /** A slot the owner offered in a message, with whether the player can still book it. */
@@ -122,7 +135,7 @@ interface StoredMensaje {
 }
 
 export interface ThreadView {
-  conversacion: Omit<ConversacionView, 'ultimoMensaje' | 'noLeidos'>
+  conversacion: Omit<ConversacionView, 'ultimoMensaje' | 'noLeidos' | 'escribiendo'>
   mensajes: MensajeView[]
   hayMas: boolean
 }
@@ -133,7 +146,8 @@ export class ConversacionesService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly notifications: NotificationsService
+    private readonly notifications: NotificationsService,
+    private readonly presence: PresenceService
   ) {}
 
   /**
@@ -282,8 +296,36 @@ export class ConversacionesService {
     await this.notifications.notifyNewMessage(id, userId, text).catch((error: unknown) => {
       this.logger.warn(`Could not notify the new message of ${id}: ${String(error)}`)
     })
+    // Sending ends the "Escribiendo...": the message itself is what the other side sees now.
+    this.presence.stopTyping(id, userId)
     const [view] = await this.toMensajeViews([mensaje], userId, conversacion.cancha)
     return view
+  }
+
+  /** The app is open for this user. */
+  heartbeat(userId: string): void {
+    this.presence.beat(userId)
+  }
+
+  /** The user is typing in this conversation: the other side shows "Escribiendo...". */
+  async typing(userId: string, id: string): Promise<void> {
+    await this.findParticipating(userId, id)
+    this.presence.typing(id, userId)
+  }
+
+  /**
+   * A light look at an open conversation: is the other person connected, are they typing, and did
+   * a message arrive. Asking also tells the server that this user is here.
+   */
+  async pulse(userId: string, id: string): Promise<PulsoView> {
+    const { conversacion, side } = await this.findParticipating(userId, id)
+    this.presence.beat(userId)
+    const other = this.otherId(conversacion, side)
+    return {
+      conectado: this.presence.isOnline(other),
+      escribiendo: this.presence.isTyping(id, other),
+      ultimoMensajeAt: conversacion.ultimoMensajeAt,
+    }
   }
 
   private async validateOffer(
@@ -410,11 +452,20 @@ export class ConversacionesService {
     return side === 'jugador' ? conversacion.jugadorLeyoHasta : conversacion.duenoLeyoHasta
   }
 
+  /** The other person of the conversation: the owner for the player, the player for the owner. */
+  private otherId(conversacion: StoredConversacion, side: Side): string {
+    return side === 'jugador' ? conversacion.cancha.ownerId : conversacion.jugadorId
+  }
+
   private header(conversacion: StoredConversacion, side: Side): ThreadView['conversacion'] {
     const otro = side === 'jugador' ? conversacion.cancha.owner : conversacion.jugador
     return {
       id: conversacion.id,
-      otro: { nombre: otro.nombre, avatarUrl: otro.avatarUrl },
+      otro: {
+        nombre: otro.nombre,
+        avatarUrl: otro.avatarUrl,
+        conectado: this.presence.isOnline(this.otherId(conversacion, side)),
+      },
       cancha: { id: conversacion.cancha.id, nombre: conversacion.cancha.nombre },
       turno: this.banner(conversacion),
     }
@@ -477,6 +528,7 @@ export class ConversacionesService {
         ? { cuerpo: ultimo.cuerpo, createdAt: ultimo.createdAt, propio: ultimo.autorId === userId }
         : null,
       noLeidos,
+      escribiendo: this.presence.isTyping(conversacion.id, this.otherId(conversacion, side)),
     }
   }
 }
