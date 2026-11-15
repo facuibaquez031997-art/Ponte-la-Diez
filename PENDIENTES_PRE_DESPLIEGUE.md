@@ -84,3 +84,5 @@ Estados: ⏳ Pendiente · ✅ Resuelto · ➖ Aceptado como está (anotar motivo
 ### 6. Error de tipos en tests
 - **Situación:** `tsc --noEmit` falla por `supertest/types` en `test/app.e2e-spec.ts`. Es previo al módulo auth y no afecta la ejecución de los tests.
 - **Recomendación:** corregir el import para que el chequeo de tipos quede limpio en CI.
+| 49 | 4 - Agenda | La agenda del dueño solo muestra: no permite **bloquear un turno a mano** (por ejemplo por mantenimiento o un partido fijo por fuera de la app). El estado `BLOCKED` existe en el modelo pero nada lo crea. Evaluar un botón "Bloquear / liberar" en la agenda; hoy el dueño solo puede cambiar el horario semanal o cancelar una reserva | ⏳ |
+| 50 | 4 - Agenda | Leer la agenda genera turnos y libera reservas vencidas de todas las canchas del dueño (una lectura con efectos, ver #31 y #40) y se actualiza cada 30 segundos por cada pantalla abierta. Con muchas canchas conviene un proceso programado que genere los turnos y libere los vencidos, en vez de hacerlo al leer. Además la agenda solo ve 14 días hacia adelante: para fechas más lejanas avisa que todavía no hay turnos armados | ⏳ |

@@ -10,12 +10,15 @@ Branch: feat/agenda-dueno (from feat/chat-por-reserva, because the chat panel us
 
 ## Tasks
 
-- [ ] T1 S2 · inline · server: `GET /agenda` (service + controller + date helper) with tests · commit: -
-- [ ] T2 S1 S4 · inline · client: service, hook, day view, page `/dueno/agenda`, menu link · commit: -
-- [ ] T3 S3 · inline · client: agenda panel inside the owner's chat with the "answer with this slot" action · commit: -
-- [ ] T4 · inline · live check against the real database, docs and pending list · commit: -
+- [x] T1 S2 · inline · server: `GET /agenda` (service + controller + date helper) with tests · commit: b232d66 (12 tests; suite 371 green)
+- [x] T2 S1 S4 · inline · client: service, hook, day view, page `/dueno/agenda`, menu link · commit: 1c246a9 (tsc, eslint, vite build clean)
+- [x] T3 S3 · inline · client: agenda panel inside the owner's chat with the "answer with this slot" action · commit: 1c246a9 (same commit as T2: one client unit)
+- [x] T4 · inline · live check against the real database, docs and pending list · commit: see git log "docs(agenda)"
 
 ## Log
 
 - L1 2026-11-15 user, verbatim, while reviewing the chat in the browser: "en el dashboard del dueño tiene que tener la opcion de ver toda su agenda. por ejemplo acabo de preguntar desde el perfil de jugador por el chat si el dueño de la cancha tiene disponibles canchas para el dia 20/11/2026 y en el dashboard de el dueño no puedo fijarme eso. 2- este punto es vital en el dashboard del dueño para que pueda contestar rapido y no perder un turno."
 - 2026-11-15: the slots are generated on read (`TurnosService.sync`, window of 14 days), so the agenda must sync before reading. Blocking slots by hand is NOT part of this request: not built.
+- 2026-11-15 verification: server suite 371 tests green; client `tsc -b`, `eslint src` and `vite build` clean; live check against the real database through the HTTP API with throwaway users (23/23: a player gets 403 and no token 401, impossible and malformed days are 400, the 3 slots of tomorrow are generated free, another owner does not see the court, a booking shows who booked it / waiting for payment / until when, no email or password hash in the answer, the chat of the booking is linked, 30 days ahead is flagged outside the window, no day means today, plus the owner clear-chat change of the chat feature). The throwaway data was removed (0 leftovers).
+- 2026-11-15 not verified: the agenda screen and the chat panel were never opened in a browser (no client test runner, and the user's dev server on port 3000 runs an older build); the refresh every 30 seconds and the "Ofrecer este horario" button were not exercised.
+- Risk: item 3 (adds `GET /agenda`, a new route: nothing existing changes). Reading it has a side effect, like the public availability: it frees expired holds and generates slots (pending #40).

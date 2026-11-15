@@ -21,7 +21,7 @@ Branch: feat/chat-por-reserva (from feat/pagos-mercadopago, because it needs `Re
 - [x] T3 S9 · inline · notification to the other participant, one unread per conversation, + push · commit: dcbded2 (10 tests; suite 355 green). Assumption A1: the push goes out only when the notification is created, not on every message of a burst.
 - [x] T4 S10 · inline · client: service, `/mensajes` page, thread, polling · commit: f41b98e (tsc, eslint and vite build clean; the client has no test runner, see pending #41)
 - [x] T5 S10 · inline · client entry points (court card, my bookings, owner bookings, menu) · commit: 52b0fd7 (server suite 357 green; adds `conversacionId` to the owner bookings list, an additive field)
-- [ ] T7 S4 S5 · inline · reopened by L5: the owner's delete only clears the content, the chat stays in their inbox · commit: -
+- [x] T7 S4 S5 · inline · reopened by L5: the owner's delete only clears the content, the chat stays in their inbox · commit: fbe59ad (server suite 359 green; live check in the agenda smoke)
 - [x] T6 · inline · live check against the real database (31/31, script not committed), docs, pending list #33/#34 updated and #45-#48 added · commit: see `git log` "docs(chat)"
 
 ## Log
