@@ -3,10 +3,12 @@ import {
   HttpException,
   HttpStatus,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common'
 import type { ReservaState } from '@prisma/client'
 import { PrismaService } from '../../common/prisma/prisma.service.js'
+import { NotificationsService } from '../notifications/notifications.service.js'
 import type { CreateConversacionDto } from './dto/create-conversacion.dto.js'
 import { MAX_MENSAJE_LENGTH } from './dto/send-mensaje.dto.js'
 
@@ -101,7 +103,12 @@ export interface ThreadView {
 
 @Injectable()
 export class ConversacionesService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(ConversacionesService.name)
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService
+  ) {}
 
   /**
    * Only the player starts a conversation, with or without a booking. Asking again returns the
@@ -236,6 +243,10 @@ export class ConversacionesService {
           : { duenoLeyoHasta: mensaje.createdAt }),
       },
     })
+    // The message is already saved: a failed notification must not make the send look failed.
+    await this.notifications.notifyNewMessage(id, userId, text).catch((error: unknown) => {
+      this.logger.warn(`Could not notify the new message of ${id}: ${String(error)}`)
+    })
     return { id: mensaje.id, cuerpo: mensaje.cuerpo, createdAt: mensaje.createdAt, propio: true }
   }
 
@@ -246,6 +257,7 @@ export class ConversacionesService {
       where: { id },
       data: side === 'jugador' ? { jugadorLeyoHasta: now } : { duenoLeyoHasta: now },
     })
+    await this.notifications.markConversationRead(userId, id)
   }
 
   /** Deleting is individual: it only hides the chat from the inbox of whoever deletes it. */

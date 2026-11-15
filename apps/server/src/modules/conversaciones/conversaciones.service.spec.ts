@@ -168,8 +168,15 @@ const makePrisma = (reservas: Record<string, Reserva> = {}) => {
   return prisma
 }
 
-const makeService = (reservas: Record<string, Reserva> = {}) =>
-  new ConversacionesService(makePrisma(reservas) as never)
+const makeNotifications = () => ({
+  notifyNewMessage: vi.fn(async (_id: string, _autorId: string, _texto: string) => undefined),
+  markConversationRead: vi.fn(async (_userId: string, _id: string) => undefined),
+})
+
+const makeService = (
+  reservas: Record<string, Reserva> = {},
+  notifications: ReturnType<typeof makeNotifications> = makeNotifications()
+) => new ConversacionesService(makePrisma(reservas) as never, notifications as never)
 
 /** The player opens a chat and writes the first message. */
 const openChat = async (service: ConversacionesService, text = 'Hola, ¿tenés turno?') => {
@@ -277,7 +284,7 @@ describe('ConversacionesService', () => {
   describe('banner', () => {
     it('says the slot is free again when the booking was released', async () => {
       const prisma = makePrisma()
-      const service = new ConversacionesService(prisma as never)
+      const service = new ConversacionesService(prisma as never, makeNotifications() as never)
       const { id } = await service.create(PLAYER, { canchaId: CANCHA, reservaId: 'reserva-mia' })
       await service.send(PLAYER, id, 'Hola')
       // The booking expired: the foreign key sets reservaId to null and the copy stays.
@@ -343,6 +350,52 @@ describe('ConversacionesService', () => {
       await service.send(OWNER, id, 'Dos')
       expect((await service.thread(PLAYER, id)).mensajes).toHaveLength(2)
       expect((await service.thread(OWNER, id)).mensajes).toHaveLength(2)
+    })
+  })
+
+  describe('notifications', () => {
+    it('tells the other side about the new message, with the trimmed text', async () => {
+      const notifications = makeNotifications()
+      const service = makeService({}, notifications)
+      const { id } = await service.create(PLAYER, { canchaId: CANCHA })
+
+      await service.send(PLAYER, id, '  ¿Hay turno el sábado?  ')
+
+      expect(notifications.notifyNewMessage).toHaveBeenCalledWith(
+        id,
+        PLAYER,
+        '¿Hay turno el sábado?'
+      )
+    })
+
+    it('does not notify when the message is rejected', async () => {
+      const notifications = makeNotifications()
+      const service = makeService({}, notifications)
+      const { id } = await service.create(PLAYER, { canchaId: CANCHA })
+
+      await expect(service.send(PLAYER, id, '   ')).rejects.toBeInstanceOf(BadRequestException)
+
+      expect(notifications.notifyNewMessage).not.toHaveBeenCalled()
+    })
+
+    it('still sends the message when the notification fails', async () => {
+      const notifications = makeNotifications()
+      notifications.notifyNewMessage.mockRejectedValue(new Error('push down'))
+      const service = makeService({}, notifications)
+      const { id } = await service.create(PLAYER, { canchaId: CANCHA })
+
+      await expect(service.send(PLAYER, id, 'Hola')).resolves.toMatchObject({ cuerpo: 'Hola' })
+      expect((await service.thread(PLAYER, id)).mensajes).toHaveLength(1)
+    })
+
+    it('clears the pending notification when the conversation is read', async () => {
+      const notifications = makeNotifications()
+      const service = makeService({}, notifications)
+      const id = await openChat(service)
+
+      await service.markRead(OWNER, id)
+
+      expect(notifications.markConversationRead).toHaveBeenCalledWith(OWNER, id)
     })
   })
 

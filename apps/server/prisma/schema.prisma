@@ -212,6 +212,8 @@ model Notificacion {
   convocatoria   Convocatoria? @relation(fields: [convocatoriaId], references: [id], onDelete: SetNull)
   reservaId      String?
   reserva        Reserva?      @relation(fields: [reservaId], references: [id], onDelete: SetNull)
+  conversacionId String?
+  conversacion   Conversacion? @relation(fields: [conversacionId], references: [id], onDelete: Cascade)
   titulo         String
   cuerpo         String
   // Screen the notification opens. Older notifications have none and use the old rules.
@@ -257,21 +259,22 @@ model HistorialReserva {
 }
 
 model Conversacion {
-  id               String    @id @default(uuid())
-  reservaId        String?   @unique
-  reserva          Reserva?  @relation(fields: [reservaId], references: [id], onDelete: SetNull)
+  id               String         @id @default(uuid())
+  reservaId        String?        @unique
+  reserva          Reserva?       @relation(fields: [reservaId], references: [id], onDelete: SetNull)
   canchaId         String
-  cancha           Cancha    @relation(fields: [canchaId], references: [id], onDelete: Cascade)
+  cancha           Cancha         @relation(fields: [canchaId], references: [id], onDelete: Cascade)
   jugadorId        String
-  jugador          User      @relation(fields: [jugadorId], references: [id])
+  jugador          User           @relation(fields: [jugadorId], references: [id])
   turnoInicio      DateTime?
   jugadorLeyoHasta DateTime?
   duenoLeyoHasta   DateTime?
   jugadorEliminoAt DateTime?
   duenoEliminoAt   DateTime?
   ultimoMensajeAt  DateTime?
-  createdAt        DateTime  @default(now())
+  createdAt        DateTime       @default(now())
   mensajes         Mensaje[]
+  notificaciones   Notificacion[]
 
   @@index([jugadorId, ultimoMensajeAt])
   @@index([canchaId, ultimoMensajeAt])

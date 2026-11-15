@@ -34,9 +34,11 @@ const makeDeps = () => {
       findMany: vi.fn(async (_args?: object) => []),
       count: vi.fn(async (_args?: object) => 3),
       findUnique: vi.fn(async (_args?: object) => null as unknown),
+      findFirst: vi.fn(async (_args?: object) => null as unknown),
       update: vi.fn(async (_args?: object) => ({})),
       updateMany: vi.fn(async (_args?: object) => ({ count: 2 })),
     },
+    conversacion: { findUnique: vi.fn(async (_args?: object) => null as unknown) },
     contacto: {
       findUnique: vi.fn(async (_args?: object) => null as unknown),
       findMany: vi.fn(async (_args?: object) => [] as unknown[]),
@@ -604,5 +606,111 @@ describe('NotificationsService.notifyBookingCancelled', () => {
 
     expect(prisma.notificacion.createMany).not.toHaveBeenCalled()
     expect(push.send).not.toHaveBeenCalled()
+  })
+})
+
+describe('NotificationsService.notifyNewMessage', () => {
+  const conversacion = {
+    id: 'conv1',
+    jugadorId: 'player',
+    jugador: { id: 'player', nombre: 'Facu', subscriptions: [sub('player-device')] },
+    cancha: {
+      owner: { id: 'owner', nombre: 'Don Pepe', subscriptions: [sub('owner-device')] },
+    },
+  }
+
+  type Created = {
+    data: Array<{
+      userId: string
+      conversacionId: string
+      titulo: string
+      cuerpo: string
+      url: string
+    }>
+  }
+
+  it('tells the owner when the player writes, opening that conversation', async () => {
+    const { prisma, push, service } = makeDeps()
+    prisma.conversacion.findUnique.mockResolvedValue(conversacion)
+
+    await service.notifyNewMessage('conv1', 'player', '¿Hay turno el sábado?')
+
+    const created = prisma.notificacion.createMany.mock.calls[0][0] as Created
+    expect(created.data).toEqual([
+      {
+        userId: 'owner',
+        conversacionId: 'conv1',
+        titulo: 'Mensaje de Facu',
+        cuerpo: '¿Hay turno el sábado?',
+        url: '/mensajes/conv1',
+      },
+    ])
+    expect(push.send).toHaveBeenCalledTimes(1)
+    expect(push.send).toHaveBeenCalledWith(
+      expect.objectContaining({ endpoint: 'owner-device' }),
+      expect.objectContaining({ title: 'Mensaje de Facu', url: '/mensajes/conv1' })
+    )
+  })
+
+  it('tells the player when the owner answers', async () => {
+    const { prisma, service } = makeDeps()
+    prisma.conversacion.findUnique.mockResolvedValue(conversacion)
+
+    await service.notifyNewMessage('conv1', 'owner', 'Sí, a las 20')
+
+    const created = prisma.notificacion.createMany.mock.calls[0][0] as Created
+    expect(created.data[0]).toMatchObject({ userId: 'player', titulo: 'Mensaje de Don Pepe' })
+  })
+
+  it('keeps a single unread notification: later messages update it and send no push', async () => {
+    const { prisma, push, service } = makeDeps()
+    prisma.conversacion.findUnique.mockResolvedValue(conversacion)
+    prisma.notificacion.findFirst.mockResolvedValue({ id: 'n1' })
+
+    await service.notifyNewMessage('conv1', 'player', 'Segundo mensaje')
+
+    expect(prisma.notificacion.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { userId: 'owner', conversacionId: 'conv1', leida: false },
+      })
+    )
+    expect(prisma.notificacion.createMany).not.toHaveBeenCalled()
+    expect(prisma.notificacion.update).toHaveBeenCalledWith({
+      where: { id: 'n1' },
+      data: expect.objectContaining({ cuerpo: 'Segundo mensaje' }),
+    })
+    expect(push.send).not.toHaveBeenCalled()
+  })
+
+  it('cuts a long message to a short preview', async () => {
+    const { prisma, service } = makeDeps()
+    prisma.conversacion.findUnique.mockResolvedValue(conversacion)
+
+    await service.notifyNewMessage('conv1', 'player', 'a'.repeat(200))
+
+    const created = prisma.notificacion.createMany.mock.calls[0][0] as Created
+    expect(created.data[0].cuerpo).toBe(`${'a'.repeat(80)}…`)
+  })
+
+  it('does nothing when the conversation no longer exists', async () => {
+    const { prisma, push, service } = makeDeps()
+
+    await service.notifyNewMessage('gone', 'player', 'Hola')
+
+    expect(prisma.notificacion.createMany).not.toHaveBeenCalled()
+    expect(push.send).not.toHaveBeenCalled()
+  })
+})
+
+describe('NotificationsService.markConversationRead', () => {
+  it('marks only the unread notifications of that conversation for that user', async () => {
+    const { prisma, service } = makeDeps()
+
+    await service.markConversationRead('owner', 'conv1')
+
+    expect(prisma.notificacion.updateMany).toHaveBeenCalledWith({
+      where: { userId: 'owner', conversacionId: 'conv1', leida: false },
+      data: { leida: true },
+    })
   })
 })

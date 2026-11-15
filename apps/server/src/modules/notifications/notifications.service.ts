@@ -17,6 +17,8 @@ const CONVOCATORIAS_URL = '/convocatorias'
 const CONTACTOS_URL = '/contactos'
 const OWNER_RESERVAS_URL = '/dueno/reservas'
 const PLAYER_RESERVAS_URL = '/reservas'
+const MENSAJES_URL = '/mensajes'
+const MESSAGE_PREVIEW_LENGTH = 80
 
 const POSICION_LABEL: Record<Posicion, string> = {
   ARQUERO: 'arquero',
@@ -204,6 +206,56 @@ export class NotificationsService {
       data: [{ userId: jugador.id, titulo, cuerpo, url: PLAYER_RESERVAS_URL }],
     })
     await this.sendPush(jugador.subscriptions, titulo, cuerpo, PLAYER_RESERVAS_URL)
+  }
+
+  /**
+   * Tells the other participant about a new chat message. There is a single unread notification
+   * per conversation: a burst of messages updates it instead of filling the inbox, and the push
+   * goes out only when the notification is created.
+   */
+  async notifyNewMessage(conversacionId: string, autorId: string, texto: string): Promise<void> {
+    const conversacion = await this.prisma.conversacion.findUnique({
+      where: { id: conversacionId },
+      include: {
+        jugador: { include: { subscriptions: true } },
+        cancha: { include: { owner: { include: { subscriptions: true } } } },
+      },
+    })
+    if (!conversacion) return
+
+    const authorIsPlayer = autorId === conversacion.jugadorId
+    const autor = authorIsPlayer ? conversacion.jugador : conversacion.cancha.owner
+    const destinatario = authorIsPlayer ? conversacion.cancha.owner : conversacion.jugador
+
+    const titulo = `Mensaje de ${autor.nombre}`
+    const cuerpo =
+      texto.length > MESSAGE_PREVIEW_LENGTH ? `${texto.slice(0, MESSAGE_PREVIEW_LENGTH)}…` : texto
+    const url = `${MENSAJES_URL}/${conversacionId}`
+
+    const unread = await this.prisma.notificacion.findFirst({
+      where: { userId: destinatario.id, conversacionId, leida: false },
+      select: { id: true },
+    })
+    if (unread) {
+      await this.prisma.notificacion.update({
+        where: { id: unread.id },
+        data: { titulo, cuerpo, createdAt: new Date() },
+      })
+      return
+    }
+
+    await this.prisma.notificacion.createMany({
+      data: [{ userId: destinatario.id, conversacionId, titulo, cuerpo, url }],
+    })
+    await this.sendPush(destinatario.subscriptions, titulo, cuerpo, url)
+  }
+
+  /** The user opened the conversation, so its notification is no longer pending. */
+  async markConversationRead(userId: string, conversacionId: string): Promise<void> {
+    await this.prisma.notificacion.updateMany({
+      where: { userId, conversacionId, leida: false },
+      data: { leida: true },
+    })
   }
 
   private async findAudience(convocatoria: {
