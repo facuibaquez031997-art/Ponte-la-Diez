@@ -191,3 +191,73 @@ describe('ReservasService.listMine', () => {
     expect(view).toMatchObject({ montoPagado: 20000, montoRestante: 0 })
   })
 })
+
+describe('ReservasService.listForOwner', () => {
+  const ownerBooking = (pago: object | null, estado = 'PENDING', createdAt = now) => ({
+    ...stored(pago, estado),
+    createdAt,
+    user: { nombre: 'Ana', avatarUrl: 'https://img.test/ana.jpg' },
+  })
+
+  it('lists only the bookings of the slots of the courts of that owner, soonest first', async () => {
+    const prisma = makePrisma()
+    await new ReservasService(prisma as never).listForOwner('o1', now)
+    const call = prisma.reserva.findMany.mock.calls.at(-1)?.[0] as {
+      where: object
+      orderBy: object
+    }
+    expect(call.where).toEqual({ turno: { cancha: { ownerId: 'o1' } } })
+    expect(call.orderBy).toEqual({ turno: { fechaHoraInicio: 'asc' } })
+  })
+
+  it('frees the expired holds of the courts of that owner before listing', async () => {
+    const prisma = makePrisma()
+    await new ReservasService(prisma as never).listForOwner('o1', now)
+    const release = prisma.reserva.findMany.mock.calls[0][0] as { where: Record<string, unknown> }
+    expect(release.where.turno).toEqual({ cancha: { ownerId: 'o1' } })
+    expect(release.where.estado).toBe('PENDING')
+  })
+
+  it('shows who booked, what was paid and what is left to collect at the court', async () => {
+    const prisma = makePrisma()
+    prisma.reserva.findMany.mockResolvedValue([
+      ownerBooking({ estadoPago: 'APPROVED', monto: 5000 }, 'CONFIRMED'),
+    ])
+    const [view] = await new ReservasService(prisma as never).listForOwner('o1', now)
+    expect(view).toMatchObject({
+      id: 'r1',
+      estado: 'CONFIRMED',
+      jugador: { nombre: 'Ana', avatarUrl: 'https://img.test/ana.jpg' },
+      cancha: { id: 'c1', nombre: 'El Mate' },
+      montoTotal: 20000,
+      montoPagado: 5000,
+      montoRestante: 15000,
+      expiraEl: null,
+    })
+  })
+
+  it('never exposes the contact data of the player', async () => {
+    const prisma = makePrisma()
+    prisma.reserva.findMany.mockResolvedValue([
+      {
+        ...ownerBooking({ estadoPago: 'APPROVED', monto: 5000 }, 'CONFIRMED'),
+        user: { nombre: 'Ana', avatarUrl: null, email: 'ana@mail.com', telefono: '1155' },
+      },
+    ])
+    const [view] = await new ReservasService(prisma as never).listForOwner('o1', now)
+    expect(view.jugador).toEqual({ nombre: 'Ana', avatarUrl: null })
+    expect(JSON.stringify(view)).not.toContain('ana@mail.com')
+    expect(JSON.stringify(view)).not.toContain('1155')
+  })
+
+  it('says when an unpaid booking stops holding the slot', async () => {
+    const prisma = makePrisma()
+    const createdAt = new Date('2026-11-14T14:55:00.000Z')
+    prisma.reserva.findMany.mockResolvedValue([
+      ownerBooking({ estadoPago: 'PENDING', monto: 5000 }, 'PENDING', createdAt),
+    ])
+    const [view] = await new ReservasService(prisma as never).listForOwner('o1', now)
+    expect(view.expiraEl).toEqual(new Date('2026-11-14T15:10:00.000Z'))
+    expect(view).toMatchObject({ montoPagado: 0, montoACobrar: 5000 })
+  })
+})

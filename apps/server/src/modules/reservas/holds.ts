@@ -6,6 +6,8 @@ export const HOLD_MS = 15 * 60 * 1000
 export interface HoldScope {
   canchaId?: string
   userId?: string
+  /** Only the bookings of the courts of this owner. */
+  ownerId?: string
 }
 
 /**
@@ -26,7 +28,14 @@ export async function releaseExpiredHolds(
       // `Pago` has no cascade: deleting a booking that kept its payment would break the FK.
       OR: [{ pago: null }, { pago: { estadoPago: { not: 'APPROVED' } } }],
       ...(scope.userId ? { userId: scope.userId } : {}),
-      ...(scope.canchaId ? { turno: { canchaId: scope.canchaId } } : {}),
+      ...(scope.canchaId || scope.ownerId
+        ? {
+            turno: {
+              ...(scope.canchaId ? { canchaId: scope.canchaId } : {}),
+              ...(scope.ownerId ? { cancha: { ownerId: scope.ownerId } } : {}),
+            },
+          }
+        : {}),
     },
     select: { id: true, turnoId: true },
   })

@@ -3,7 +3,7 @@ import type { AuthUser } from '../auth/auth.types.js'
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js'
 import { Roles } from '../auth/decorators/roles.decorator.js'
 import { CreateReservaDto } from './dto/create-reserva.dto.js'
-import { type ReservaView, ReservasService } from './reservas.service.js'
+import { type OwnerReservaView, type ReservaView, ReservasService } from './reservas.service.js'
 
 @Controller('reservas')
 export class ReservasController {
@@ -19,5 +19,11 @@ export class ReservasController {
   @Roles('PLAYER')
   listMine(@CurrentUser() user: AuthUser): Promise<ReservaView[]> {
     return this.reservas.listMine(user.id)
+  }
+
+  @Get('owner')
+  @Roles('OWNER')
+  listForOwner(@CurrentUser() user: AuthUser): Promise<OwnerReservaView[]> {
+    return this.reservas.listForOwner(user.id)
   }
 }

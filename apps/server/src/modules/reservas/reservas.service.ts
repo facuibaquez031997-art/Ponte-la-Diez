@@ -7,7 +7,7 @@ import {
 import type { Cancha, Pago, Reserva, ReservaState, Turno } from '@prisma/client'
 import { PrismaService } from '../../common/prisma/prisma.service.js'
 import type { CreateReservaDto } from './dto/create-reserva.dto.js'
-import { releaseExpiredHolds } from './holds.js'
+import { HOLD_MS, releaseExpiredHolds } from './holds.js'
 
 type StoredReserva = Pick<Reserva, 'id' | 'estado' | 'montoTotal'> & {
   turno: Pick<Turno, 'fechaHoraInicio' | 'fechaHoraFin'> & {
@@ -43,6 +43,11 @@ const reservaInclude = {
   pago: { select: { estadoPago: true, monto: true } },
 } as const
 
+const ownerInclude = {
+  ...reservaInclude,
+  user: { select: { nombre: true, avatarUrl: true } },
+} as const
+
 function toView(reserva: StoredReserva): ReservaView {
   const montoPagado = reserva.pago?.estadoPago === 'APPROVED' ? reserva.pago.monto : 0
   return {
@@ -55,6 +60,27 @@ function toView(reserva: StoredReserva): ReservaView {
     montoACobrar: reserva.pago?.estadoPago === 'PENDING' ? reserva.pago.monto : null,
     montoPagado,
     montoRestante: Math.max(reserva.montoTotal - montoPagado, 0),
+  }
+}
+
+/** A booking as the owner of the court sees it: no contact data of the player. */
+export interface OwnerReservaView extends ReservaView {
+  jugador: { nombre: string; avatarUrl: string | null }
+  /** When an unpaid booking stops holding the slot, or null once it is not waiting anymore. */
+  expiraEl: Date | null
+}
+
+type StoredOwnerReserva = StoredReserva & {
+  createdAt: Date
+  user: { nombre: string; avatarUrl: string | null }
+}
+
+function toOwnerView(reserva: StoredOwnerReserva): OwnerReservaView {
+  return {
+    ...toView(reserva),
+    // Only these two fields leave the server, whatever else the query brought.
+    jugador: { nombre: reserva.user.nombre, avatarUrl: reserva.user.avatarUrl },
+    expiraEl: reserva.estado === 'PENDING' ? new Date(reserva.createdAt.getTime() + HOLD_MS) : null,
   }
 }
 
@@ -107,5 +133,16 @@ export class ReservasService {
       include: reservaInclude,
     })
     return reservas.map(toView)
+  }
+
+  /** Bookings of the slots of the courts of this owner, soonest first. */
+  async listForOwner(ownerId: string, now: Date = new Date()): Promise<OwnerReservaView[]> {
+    await releaseExpiredHolds(this.prisma, now, { ownerId })
+    const reservas = await this.prisma.reserva.findMany({
+      where: { turno: { cancha: { ownerId } } },
+      orderBy: { turno: { fechaHoraInicio: 'asc' } },
+      include: ownerInclude,
+    })
+    return reservas.map(toOwnerView)
   }
 }

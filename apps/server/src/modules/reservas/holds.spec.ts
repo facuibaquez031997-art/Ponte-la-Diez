@@ -63,6 +63,14 @@ describe('releaseExpiredHolds', () => {
     })
   })
 
+  it('can be limited to the courts of one owner', async () => {
+    const prisma = makePrisma()
+    await releaseExpiredHolds(prisma as never, now, { ownerId: 'o1' })
+    const where = (prisma.reserva.findMany.mock.calls[0][0] as { where: Record<string, unknown> })
+      .where
+    expect(where.turno).toEqual({ cancha: { ownerId: 'o1' } })
+  })
+
   it('can be limited to one court or one player', async () => {
     const prisma = makePrisma()
     await releaseExpiredHolds(prisma as never, now, { canchaId: 'c1', userId: 'u1' })
