@@ -1,6 +1,6 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
 import BarrioCombobox from '../common/BarrioCombobox'
-import { SURFACES, type CanchaFilters } from '../../types/canchas'
+import { SURFACES, TAMANOS, type CanchaFilters } from '../../types/canchas'
 import { formatMoney, onlyDigits } from '../../utils/money'
 
 const controlClass =
@@ -50,7 +50,7 @@ const ExploreSearch = ({ filters, fecha, minFecha, maxFecha, onApply }: ExploreS
     <div className="w-full rounded-xl bg-surface-container-lowest p-4 shadow-xl md:p-6">
       <form
         onSubmit={handleSubmit}
-        className="grid grid-cols-1 items-end gap-4 sm:grid-cols-2 lg:grid-cols-5"
+        className="grid grid-cols-1 items-end gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6"
       >
         <BarrioCombobox
           id="filter-barrio"
@@ -73,6 +73,30 @@ const ExploreSearch = ({ filters, fecha, minFecha, maxFecha, onApply }: ExploreS
               {SURFACES.map((surface) => (
                 <option key={surface} value={surface}>
                   {surface}
+                </option>
+              ))}
+            </select>
+            <span
+              aria-hidden="true"
+              className="material-symbols-outlined pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[20px] text-on-surface-variant"
+            >
+              expand_more
+            </span>
+          </div>
+        </Field>
+
+        <Field id="filter-size" label="Tamaño" icon="groups">
+          <div className="relative">
+            <select
+              id="filter-size"
+              value={draft.jugadores}
+              onChange={(e) => setDraft((current) => ({ ...current, jugadores: e.target.value }))}
+              className={`${controlClass} cursor-pointer appearance-none`}
+            >
+              <option value="">Todos</option>
+              {TAMANOS.map((size) => (
+                <option key={size} value={String(size)}>
+                  {size} jugadores
                 </option>
               ))}
             </select>

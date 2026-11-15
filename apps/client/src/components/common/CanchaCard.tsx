@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import type { Cancha, Franja } from '../../types/canchas'
+import { formatJugadores } from '../../utils/canchas'
 import CanchaPhotos from './CanchaPhotos'
 import { summarizeWeek } from './scheduleModel'
 
@@ -37,6 +38,16 @@ const CanchaCard = ({
       <p className="text-sm text-on-surface-variant">
         {cancha.tipoSuperficie} · {cancha.barrio}
       </p>
+      {cancha.jugadores ? (
+        <p className="text-sm font-semibold text-secondary">{formatJugadores(cancha.jugadores)}</p>
+      ) : (
+        <p
+          role="status"
+          className="w-fit rounded-full bg-error-container px-3 py-1 text-xs font-semibold text-on-error-container"
+        >
+          Falta el tamaño: editá la cancha para elegirlo
+        </p>
+      )}
       <p className="text-sm text-on-surface-variant">{cancha.direccion}</p>
     </div>
 

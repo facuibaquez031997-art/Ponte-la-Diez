@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { getAuthErrorMessage } from '../../pages/Auth/authError'
-import { SURFACES, type Cancha, type CanchaInput } from '../../types/canchas'
+import { SURFACES, TAMANOS, type Cancha, type CanchaInput } from '../../types/canchas'
 import { MAX_MONEY, formatMoney, onlyDigits } from '../../utils/money'
 import BarrioCombobox from './BarrioCombobox'
 
@@ -19,6 +19,8 @@ const CanchaForm = ({ cancha, onSubmit, onCancel }: CanchaFormProps) => {
   const [direccion, setDireccion] = useState(cancha?.direccion ?? '')
   const [barrio, setBarrio] = useState(cancha?.barrio ?? '')
   const [tipoSuperficie, setTipoSuperficie] = useState(cancha?.tipoSuperficie ?? SURFACES[0])
+  // "" until the owner chooses: a court cannot be saved without its size, not even an old one.
+  const [jugadores, setJugadores] = useState(cancha?.jugadores ? String(cancha.jugadores) : '')
   const [precioHora, setPrecioHora] = useState(cancha ? String(cancha.precioHora) : '')
   const [montoSena, setMontoSena] = useState(cancha ? String(cancha.montoSena) : '')
   const [saving, setSaving] = useState(false)
@@ -34,6 +36,7 @@ const CanchaForm = ({ cancha, onSubmit, onCancel }: CanchaFormProps) => {
         direccion: direccion.trim(),
         barrio,
         tipoSuperficie,
+        jugadores: Number(jugadores),
         precioHora: Number(precioHora),
         montoSena: Number(montoSena),
       })
@@ -47,6 +50,7 @@ const CanchaForm = ({ cancha, onSubmit, onCancel }: CanchaFormProps) => {
     nombre.trim().length >= 2 &&
     direccion.trim().length >= 3 &&
     barrio !== '' &&
+    jugadores !== '' &&
     Number(precioHora) > 0 &&
     Number(precioHora) <= MAX_MONEY &&
     montoSena !== '' &&
@@ -110,6 +114,28 @@ const CanchaForm = ({ cancha, onSubmit, onCancel }: CanchaFormProps) => {
             {SURFACES.map((surface) => (
               <option key={surface} value={surface}>
                 {surface}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="cancha-tamano" className={LABEL_CLASS}>
+            Tamaño de la cancha
+          </label>
+          <select
+            id="cancha-tamano"
+            required
+            value={jugadores}
+            onChange={(e) => setJugadores(e.target.value)}
+            className={`${FIELD_CLASS} cursor-pointer`}
+          >
+            <option value="" disabled>
+              Elegí cuántos jugadores
+            </option>
+            {TAMANOS.map((size) => (
+              <option key={size} value={String(size)}>
+                {size} jugadores
               </option>
             ))}
           </select>

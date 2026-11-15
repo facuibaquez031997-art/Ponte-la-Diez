@@ -5,11 +5,13 @@ import { pagosService } from '../../services/pagos.service'
 import { reservasService } from '../../services/reservas.service'
 import type { Cancha, TurnoLibre } from '../../types/canchas'
 import type { TipoPago } from '../../types/reservas'
+import { formatJugadores } from '../../utils/canchas'
 import { formatLongDate, formatSlotTime } from '../../utils/dates'
 import { formatPesos } from '../../utils/money'
 
 interface BookingDialogProps {
-  cancha: Pick<Cancha, 'nombre' | 'barrio' | 'precioHora' | 'montoSena'>
+  cancha: Pick<Cancha, 'nombre' | 'barrio' | 'precioHora' | 'montoSena'> &
+    Partial<Pick<Cancha, 'jugadores'>>
   slot: Pick<TurnoLibre, 'id' | 'fechaHoraInicio'>
   /** AAAA-MM-DD day the slot belongs to. */
   fecha: string
@@ -83,6 +85,7 @@ const BookingDialog = ({ cancha, slot, fecha, onClose, onSlotTaken }: BookingDia
         </h2>
         <p className="mt-2 text-sm text-on-surface-variant">
           <span className="font-semibold text-on-surface">{cancha.nombre}</span> · {cancha.barrio}
+          {cancha.jugadores ? ` · ${formatJugadores(cancha.jugadores)}` : ''}
           <br />
           <span className="capitalize">{formatLongDate(fecha)}</span> ·{' '}
           {formatSlotTime(slot.fechaHoraInicio)} hs

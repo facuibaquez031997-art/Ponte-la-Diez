@@ -21,7 +21,7 @@ export const useExploreCanchas = (
   refreshKey = 0
 ) => {
   const [state, setState] = useState<ExploreState>(INITIAL)
-  const { barrio, tipoSuperficie, precioMax } = filters
+  const { barrio, tipoSuperficie, jugadores, precioMax } = filters
 
   useEffect(() => {
     if (!enabled) return
@@ -29,7 +29,7 @@ export const useExploreCanchas = (
     const timer = window.setTimeout(async () => {
       setState((current) => ({ ...current, loading: true, error: null }))
       try {
-        const canchas = await canchasService.list({ barrio, tipoSuperficie, precioMax })
+        const canchas = await canchasService.list({ barrio, tipoSuperficie, jugadores, precioMax })
         const entries = await Promise.all(
           canchas.map(
             async (cancha) =>
@@ -47,7 +47,7 @@ export const useExploreCanchas = (
       ignore = true
       window.clearTimeout(timer)
     }
-  }, [enabled, barrio, tipoSuperficie, precioMax, fecha, refreshKey])
+  }, [enabled, barrio, tipoSuperficie, jugadores, precioMax, fecha, refreshKey])
 
   return state
 }

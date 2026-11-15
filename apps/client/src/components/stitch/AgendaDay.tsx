@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import type { Agenda, AgendaCancha, AgendaTurno } from '../../types/agenda'
+import { formatJugadores } from '../../utils/canchas'
 import { formatSlotTime } from '../../utils/dates'
 import { formatPesos } from '../../utils/money'
 
@@ -98,6 +99,7 @@ const AgendaDay = ({ agenda, canchaId, onPickSlot, compact = false }: AgendaDayP
                 {cancha.nombre}{' '}
                 <span className="text-sm normal-case text-on-surface-variant">
                   · {cancha.tipoSuperficie}
+                  {cancha.jugadores ? ` · ${formatJugadores(cancha.jugadores)}` : ''}
                 </span>
               </h3>
               <span className="text-xs font-semibold text-secondary">

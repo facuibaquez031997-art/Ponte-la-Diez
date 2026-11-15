@@ -12,7 +12,7 @@ import { SAMPLE_NEXT_MATCH, SAMPLE_OPEN_MATCHES } from './exploreSampleData'
 
 const containerClass = 'mx-auto w-full max-w-[1280px] px-4 md:px-8 lg:px-12'
 
-const NO_FILTERS: CanchaFilters = { barrio: '', tipoSuperficie: '', precioMax: '' }
+const NO_FILTERS: CanchaFilters = { barrio: '', tipoSuperficie: '', jugadores: '', precioMax: '' }
 // The API keeps slots for today and the next 13 days.
 const WINDOW_DAYS = 13
 

@@ -26,7 +26,7 @@ export interface ConversacionHeader {
   id: string
   /** The other person of the conversation. */
   otro: ChatParticipant
-  cancha: { id: string; nombre: string }
+  cancha: { id: string; nombre: string; jugadores: number | null }
   turno: TurnoBanner | null
 }
 
@@ -43,7 +43,14 @@ export interface Oferta {
   fechaHoraInicio: string
   /** Still free and in the future. A booked, expired or deleted slot is not available anymore. */
   disponible: boolean
-  cancha: { id: string; nombre: string; barrio: string; precioHora: number; montoSena: number }
+  cancha: {
+    id: string
+    nombre: string
+    barrio: string
+    precioHora: number
+    montoSena: number
+    jugadores: number | null
+  }
 }
 
 export interface Mensaje {

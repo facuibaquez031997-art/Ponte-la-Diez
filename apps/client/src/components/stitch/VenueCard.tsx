@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useStartConversacion } from '../../hooks/useStartConversacion'
 import type { Cancha, TurnoLibre } from '../../types/canchas'
+import { formatJugadores } from '../../utils/canchas'
 import { formatSlotTime } from '../../utils/dates'
 import { formatPesos } from '../../utils/money'
 import BookingDialog from '../common/BookingDialog'
@@ -48,6 +49,7 @@ const VenueCard = ({ cancha, slots, fecha, canBook, onSlotTaken }: VenueCardProp
 
         <span className="absolute left-3 top-3 rounded-full bg-primary-container px-2 py-1 font-display text-eyebrow-badge uppercase text-secondary-container">
           {cancha.tipoSuperficie}
+          {cancha.jugadores ? ` · ${formatJugadores(cancha.jugadores)}` : ''}
         </span>
 
         <div className="absolute bottom-3 left-3 right-3 text-on-primary">

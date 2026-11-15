@@ -7,6 +7,7 @@ import type { Role } from '../../types/auth'
 import { MAX_MENSAJE_LENGTH, type Oferta, type TurnoBanner } from '../../types/conversaciones'
 import { chatSubtitle, chatTitle } from '../../utils/chat'
 import { chatDayKey, formatChatDay, formatSlotShortDate, formatSlotTime } from '../../utils/dates'
+import { formatJugadores } from '../../utils/canchas'
 import { formatPesos } from '../../utils/money'
 import ConfirmDialog from '../common/ConfirmDialog'
 import BookingDialog from '../common/BookingDialog'
@@ -219,7 +220,11 @@ const ChatThread = ({ id, rol, onChanged, onBack }: ChatThreadProps) => {
               {chatTitle(conversacion, rol)}
             </h2>
             <p className="truncate text-xs text-on-surface-variant">
-              {chatSubtitle(conversacion, rol)} ·{' '}
+              {chatSubtitle(conversacion, rol)}
+              {conversacion.cancha.jugadores
+                ? ` · ${formatJugadores(conversacion.cancha.jugadores)}`
+                : ''}{' '}
+              ·{' '}
               {escribiendo ? (
                 <span className="font-semibold italic text-secondary">Escribiendo...</span>
               ) : conectado ? (

@@ -17,6 +17,7 @@ export const canchasService = {
         params: {
           barrio: filters.barrio || undefined,
           tipoSuperficie: filters.tipoSuperficie || undefined,
+          jugadores: filters.jugadores ? Number(filters.jugadores) : undefined,
           precioMax: filters.precioMax ? Number(filters.precioMax) : undefined,
         },
       })

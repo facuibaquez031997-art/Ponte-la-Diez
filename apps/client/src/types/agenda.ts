@@ -25,7 +25,7 @@ export interface AgendaTurno {
 }
 
 export interface AgendaCancha {
-  cancha: { id: string; nombre: string; tipoSuperficie: string }
+  cancha: { id: string; nombre: string; tipoSuperficie: string; jugadores: number | null }
   turnos: AgendaTurno[]
 }
 

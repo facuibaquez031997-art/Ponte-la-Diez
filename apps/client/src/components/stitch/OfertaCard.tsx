@@ -1,4 +1,5 @@
 import type { Oferta } from '../../types/conversaciones'
+import { formatJugadores } from '../../utils/canchas'
 import { formatSlotDate, formatSlotTime } from '../../utils/dates'
 import { formatPesos } from '../../utils/money'
 
@@ -23,6 +24,7 @@ const OfertaCard = ({ oferta, propio, onBook }: OfertaCardProps) => (
     <p className="mt-1 font-bold capitalize">{formatSlotDate(oferta.fechaHoraInicio)}</p>
     <p className="text-sm">
       {formatSlotTime(oferta.fechaHoraInicio)} hs · {oferta.cancha.nombre}
+      {oferta.cancha.jugadores ? ` · ${formatJugadores(oferta.cancha.jugadores)}` : ''}
     </p>
     <p className={`text-xs ${propio ? 'text-on-primary-container' : 'text-on-surface-variant'}`}>
       {formatPesos(oferta.cancha.precioHora)} el turno · seña {formatPesos(oferta.cancha.montoSena)}

@@ -1,5 +1,8 @@
 export const SURFACES = ['Sintético', 'Césped natural', 'Cemento', 'Parquet'] as const
 
+// Players per side: a court of 5, 7, 9 or 11.
+export const TAMANOS = [5, 7, 9, 11] as const
+
 export const MAX_FOTOS = 5
 
 export interface CanchaFoto {
@@ -23,6 +26,8 @@ export interface Cancha {
   direccion: string
   barrio: string
   tipoSuperficie: string
+  // Courts created before the size existed have none until the owner sets it.
+  jugadores: number | null
   precioHora: number
   montoSena: number
   // Oldest first: the first photo is the cover.
@@ -39,10 +44,15 @@ export interface TurnoLibre {
 export interface CanchaFilters {
   barrio: string
   tipoSuperficie: string
+  // "" = any size, otherwise "5", "7", "9" or "11".
+  jugadores: string
   precioMax: string
 }
 
-export type CanchaInput = Omit<Cancha, 'id' | 'ownerId' | 'fotos'>
+// The size is required to save a court, even when the stored one has none yet.
+export type CanchaInput = Omit<Cancha, 'id' | 'ownerId' | 'fotos' | 'jugadores'> & {
+  jugadores: number
+}
 
 // Day of the week as the API sends it: 0 = Sunday ... 6 = Saturday.
 export interface Franja {
