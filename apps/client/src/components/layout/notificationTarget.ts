@@ -10,6 +10,7 @@ const OWNER_RESERVAS_PATH = '/dueno/reservas'
  * notification needs its own rule here.
  */
 export const notificationTarget = (notification: AppNotification): string => {
+  if (notification.url) return notification.url
   if (notification.reservaId) return OWNER_RESERVAS_PATH
   return notification.convocatoriaId ? CONVOCATORIAS_PATH : CONTACTOS_PATH
 }

@@ -4,6 +4,9 @@ import { formatPesos } from '../../utils/money'
 
 interface OwnerReservaRowProps {
   reserva: OwnerReserva
+  /** Offered while the turn has not started: nobody can play, so the owner frees it. */
+  onCancel?: (reserva: OwnerReserva) => void
+  disabled?: boolean
 }
 
 const initialsOf = (nombre: string): string =>
@@ -16,7 +19,7 @@ const initialsOf = (nombre: string): string =>
 
 // Same row as "Horarios de hoy" of the Stitch owner panel: time block, court, who booked,
 // price with the seña paid through Mercado Pago, and a state chip.
-const OwnerReservaRow = ({ reserva }: OwnerReservaRowProps) => {
+const OwnerReservaRow = ({ reserva, onCancel, disabled = false }: OwnerReservaRowProps) => {
   const pending = reserva.estado === 'PENDING'
   const paidInFull = !pending && reserva.montoRestante === 0
 
@@ -56,7 +59,7 @@ const OwnerReservaRow = ({ reserva }: OwnerReservaRowProps) => {
         </span>
       </div>
 
-      <div className="flex items-center justify-between gap-4 sm:justify-end">
+      <div className="flex flex-wrap items-center justify-between gap-3 sm:justify-end">
         <div className="text-right">
           <p className="font-bold text-on-surface">{formatPesos(reserva.montoTotal)} total</p>
           {pending ? (
@@ -78,6 +81,16 @@ const OwnerReservaRow = ({ reserva }: OwnerReservaRowProps) => {
         >
           {chip.label}
         </span>
+        {onCancel && (
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => onCancel(reserva)}
+            className="shrink-0 rounded-xl bg-surface-container px-3 py-2 text-xs font-semibold text-on-surface transition-all hover:bg-surface-container-high active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Cancelar turno
+          </button>
+        )}
       </div>
     </li>
   )

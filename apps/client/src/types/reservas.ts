@@ -40,3 +40,30 @@ export interface OwnerReserva extends Reserva {
   /** When an unpaid booking stops holding the slot, or null once it is not waiting anymore. */
   expiraEl: string | null
 }
+
+export type MotivoCierre = 'VENCIDA' | 'CANCELADA_DUENO'
+
+export type EstadoDevolucion = 'NO_CORRESPONDE' | 'PENDIENTE' | 'HECHA'
+
+/** A booking that stopped existing (expired unpaid, or cancelled by the owner). */
+export interface HistorialItem {
+  id: string
+  motivo: MotivoCierre
+  devolucion: EstadoDevolucion
+  cancha: { id: string; nombre: string }
+  jugador: { nombre: string; avatarUrl: string | null }
+  turnoInicio: string
+  turnoFin: string
+  montoTotal: number
+  /** What the player paid online (zero when the booking expired unpaid). */
+  montoPagado: number
+  devueltoAt: string | null
+  reservadaAt: string
+  cerradaAt: string
+}
+
+export interface CancelResult {
+  historialId: string
+  montoPagado: number
+  devolucion: EstadoDevolucion
+}
