@@ -72,6 +72,8 @@ model User {
   contactosEnviados  Contacto[]              @relation("ContactosEnviados")
   contactosRecibidos Contacto[]              @relation("ContactosRecibidos")
   historialReservas  HistorialReserva[]
+  conversaciones     Conversacion[]
+  mensajes           Mensaje[]
 }
 
 model Contacto {
@@ -102,6 +104,7 @@ model Cancha {
   fotos          CanchaFoto[]
   convocatorias  Convocatoria[]
   historial      HistorialReserva[]
+  conversaciones Conversacion[]
 }
 
 model CanchaFoto {
@@ -149,6 +152,7 @@ model Reserva {
   createdAt      DateTime       @default(now())
   pago           Pago?
   notificaciones Notificacion[]
+  conversacion   Conversacion?
 }
 
 model Pago {
@@ -250,4 +254,37 @@ model HistorialReserva {
   cerradaAt   DateTime         @default(now())
 
   @@index([canchaId, cerradaAt])
+}
+
+model Conversacion {
+  id               String    @id @default(uuid())
+  reservaId        String?   @unique
+  reserva          Reserva?  @relation(fields: [reservaId], references: [id], onDelete: SetNull)
+  canchaId         String
+  cancha           Cancha    @relation(fields: [canchaId], references: [id], onDelete: Cascade)
+  jugadorId        String
+  jugador          User      @relation(fields: [jugadorId], references: [id])
+  turnoInicio      DateTime?
+  jugadorLeyoHasta DateTime?
+  duenoLeyoHasta   DateTime?
+  jugadorEliminoAt DateTime?
+  duenoEliminoAt   DateTime?
+  ultimoMensajeAt  DateTime?
+  createdAt        DateTime  @default(now())
+  mensajes         Mensaje[]
+
+  @@index([jugadorId, ultimoMensajeAt])
+  @@index([canchaId, ultimoMensajeAt])
+}
+
+model Mensaje {
+  id             String       @id @default(uuid())
+  conversacionId String
+  conversacion   Conversacion @relation(fields: [conversacionId], references: [id], onDelete: Cascade)
+  autorId        String
+  autor          User         @relation(fields: [autorId], references: [id])
+  cuerpo         String
+  createdAt      DateTime     @default(now())
+
+  @@index([conversacionId, createdAt])
 }
