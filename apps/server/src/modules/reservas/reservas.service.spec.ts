@@ -57,7 +57,12 @@ const makePrisma = () => {
       deleteMany: vi.fn(async (_args?: object) => ({ count: 0 })),
       findUnique: vi.fn(async (_args?: object) => null as unknown),
     },
-    historialReserva: { create: vi.fn(async (_args?: object) => ({})) },
+    historialReserva: {
+      create: vi.fn(async (_args?: object) => ({ id: 'h-new' }) as unknown),
+      findMany: vi.fn(async (_args?: object) => [] as unknown[]),
+      findFirst: vi.fn(async (_args?: object) => null as unknown),
+      updateMany: vi.fn(async (_args?: object) => ({ count: 1 })),
+    },
     $transaction: vi.fn(async (arg: unknown) =>
       typeof arg === 'function'
         ? (arg as (tx: unknown) => unknown)(prisma)
@@ -454,5 +459,131 @@ describe('ReservasService.cancelByOwner', () => {
     expect(prisma.historialReserva.create).not.toHaveBeenCalled()
     expect(prisma.turno.update).not.toHaveBeenCalled()
     expect(notifications.notifyBookingCancelled).not.toHaveBeenCalled()
+  })
+})
+
+describe('ReservasService history of the owner', () => {
+  const row = (overrides: object = {}) => ({
+    id: 'h1',
+    motivo: 'CANCELADA_DUENO',
+    devolucion: 'PENDIENTE',
+    turnoInicio: new Date('2026-11-15T20:00:00.000Z'),
+    turnoFin: new Date('2026-11-15T21:00:00.000Z'),
+    montoTotal: 20000,
+    montoPagado: 5000,
+    devueltoAt: null,
+    reservadaAt: new Date('2026-11-14T14:50:00.000Z'),
+    cerradaAt: new Date('2026-11-14T16:00:00.000Z'),
+    cancha: { id: 'c1', nombre: 'El Mate' },
+    jugador: { nombre: 'Ana', avatarUrl: 'https://img.test/ana.jpg' },
+    ...overrides,
+  })
+
+  describe('listHistorial', () => {
+    it('lists only the records of the courts of that owner, newest first', async () => {
+      const prisma = makePrisma()
+      await new ReservasService(prisma as never, makeNotifications() as never).listHistorial('o1')
+      const call = prisma.historialReserva.findMany.mock.calls[0][0] as {
+        where: object
+        orderBy: object
+      }
+      expect(call.where).toEqual({ cancha: { ownerId: 'o1' } })
+      expect(call.orderBy).toEqual({ cerradaAt: 'desc' })
+    })
+
+    it('shows who, which court, the amounts and the refund state', async () => {
+      const prisma = makePrisma()
+      prisma.historialReserva.findMany.mockResolvedValue([row()])
+      const [view] = await new ReservasService(
+        prisma as never,
+        makeNotifications() as never
+      ).listHistorial('o1')
+      expect(view).toEqual({
+        id: 'h1',
+        motivo: 'CANCELADA_DUENO',
+        devolucion: 'PENDIENTE',
+        turnoInicio: new Date('2026-11-15T20:00:00.000Z'),
+        turnoFin: new Date('2026-11-15T21:00:00.000Z'),
+        montoTotal: 20000,
+        montoPagado: 5000,
+        devueltoAt: null,
+        reservadaAt: new Date('2026-11-14T14:50:00.000Z'),
+        cerradaAt: new Date('2026-11-14T16:00:00.000Z'),
+        cancha: { id: 'c1', nombre: 'El Mate' },
+        jugador: { nombre: 'Ana', avatarUrl: 'https://img.test/ana.jpg' },
+      })
+    })
+
+    it('never exposes the payment id or the contact data of the player', async () => {
+      const prisma = makePrisma()
+      prisma.historialReserva.findMany.mockResolvedValue([
+        row({
+          mpPaymentId: '189744906496',
+          jugadorId: 'u1',
+          jugador: { nombre: 'Ana', avatarUrl: null, email: 'ana@mail.com', telefono: '1155' },
+        }),
+      ])
+      const [view] = await new ReservasService(
+        prisma as never,
+        makeNotifications() as never
+      ).listHistorial('o1')
+      const text = JSON.stringify(view)
+      expect(text).not.toContain('189744906496')
+      expect(text).not.toContain('ana@mail.com')
+      expect(text).not.toContain('1155')
+      expect(text).not.toContain('u1')
+    })
+  })
+
+  describe('markRefunded', () => {
+    const service = (prisma: ReturnType<typeof makePrisma>) =>
+      new ReservasService(prisma as never, makeNotifications() as never)
+
+    it('marks a pending refund as done, with the time, only for a court of that owner', async () => {
+      const prisma = makePrisma()
+      prisma.historialReserva.findFirst.mockResolvedValue(
+        row({ devolucion: 'HECHA', devueltoAt: now })
+      )
+      const view = await service(prisma).markRefunded('o1', 'h1', now)
+      expect(prisma.historialReserva.updateMany).toHaveBeenCalledWith({
+        where: { id: 'h1', devolucion: 'PENDIENTE', cancha: { ownerId: 'o1' } },
+        data: { devolucion: 'HECHA', devueltoAt: now },
+      })
+      expect(view).toMatchObject({ id: 'h1', devolucion: 'HECHA', devueltoAt: now })
+    })
+
+    it('answers the same when it was already marked (no error, nothing changes again)', async () => {
+      const prisma = makePrisma()
+      prisma.historialReserva.updateMany.mockResolvedValue({ count: 0 })
+      prisma.historialReserva.findFirst.mockResolvedValue(
+        row({ devolucion: 'HECHA', devueltoAt: new Date('2026-11-14T18:00:00.000Z') })
+      )
+      const view = await service(prisma).markRefunded('o1', 'h1', now)
+      expect(view.devolucion).toBe('HECHA')
+      expect(view.devueltoAt).toEqual(new Date('2026-11-14T18:00:00.000Z'))
+    })
+
+    it('answers 409 when there was nothing to return', async () => {
+      const prisma = makePrisma()
+      prisma.historialReserva.updateMany.mockResolvedValue({ count: 0 })
+      prisma.historialReserva.findFirst.mockResolvedValue(
+        row({ devolucion: 'NO_CORRESPONDE', montoPagado: 0 })
+      )
+      await expect(service(prisma).markRefunded('o1', 'h1', now)).rejects.toBeInstanceOf(
+        ConflictException
+      )
+    })
+
+    it('answers 404 for an unknown record and for another owner', async () => {
+      const prisma = makePrisma()
+      prisma.historialReserva.updateMany.mockResolvedValue({ count: 0 })
+      prisma.historialReserva.findFirst.mockResolvedValue(null)
+      await expect(service(prisma).markRefunded('o2', 'h1', now)).rejects.toBeInstanceOf(
+        NotFoundException
+      )
+      expect(prisma.historialReserva.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'h1', cancha: { ownerId: 'o2' } } })
+      )
+    })
   })
 })

@@ -5,7 +5,15 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common'
-import type { Cancha, EstadoDevolucion, Pago, Reserva, ReservaState, Turno } from '@prisma/client'
+import type {
+  Cancha,
+  EstadoDevolucion,
+  MotivoCierre,
+  Pago,
+  Reserva,
+  ReservaState,
+  Turno,
+} from '@prisma/client'
 import { PrismaService } from '../../common/prisma/prisma.service.js'
 import { NotificationsService } from '../notifications/notifications.service.js'
 import type { CreateReservaDto } from './dto/create-reserva.dto.js'
@@ -83,6 +91,51 @@ function toOwnerView(reserva: StoredOwnerReserva): OwnerReservaView {
     // Only these two fields leave the server, whatever else the query brought.
     jugador: { nombre: reserva.user.nombre, avatarUrl: reserva.user.avatarUrl },
     expiraEl: reserva.estado === 'PENDING' ? new Date(reserva.createdAt.getTime() + HOLD_MS) : null,
+  }
+}
+
+/** A booking that stopped existing, as the owner of the court sees it. */
+export interface HistorialView {
+  id: string
+  motivo: MotivoCierre
+  devolucion: EstadoDevolucion
+  cancha: { id: string; nombre: string }
+  jugador: { nombre: string; avatarUrl: string | null }
+  turnoInicio: Date
+  turnoFin: Date
+  montoTotal: number
+  /** What the player paid online (zero when the booking expired unpaid). */
+  montoPagado: number
+  devueltoAt: Date | null
+  reservadaAt: Date
+  cerradaAt: Date
+}
+
+const historialInclude = {
+  cancha: { select: { id: true, nombre: true } },
+  jugador: { select: { nombre: true, avatarUrl: true } },
+} as const
+
+type StoredHistorial = Omit<HistorialView, 'cancha' | 'jugador'> & {
+  cancha: { id: string; nombre: string }
+  jugador: { nombre: string; avatarUrl: string | null }
+}
+
+// Field by field on purpose: the payment id, the player id and any contact data stay inside.
+function toHistorialView(row: StoredHistorial): HistorialView {
+  return {
+    id: row.id,
+    motivo: row.motivo,
+    devolucion: row.devolucion,
+    turnoInicio: row.turnoInicio,
+    turnoFin: row.turnoFin,
+    montoTotal: row.montoTotal,
+    montoPagado: row.montoPagado,
+    devueltoAt: row.devueltoAt,
+    reservadaAt: row.reservadaAt,
+    cerradaAt: row.cerradaAt,
+    cancha: { id: row.cancha.id, nombre: row.cancha.nombre },
+    jugador: { nombre: row.jugador.nombre, avatarUrl: row.jugador.avatarUrl },
   }
 }
 
@@ -237,5 +290,40 @@ export class ReservasService {
       )
     }
     return result
+  }
+
+  /** Bookings of the courts of this owner that no longer exist (expired or cancelled), newest first. */
+  async listHistorial(ownerId: string): Promise<HistorialView[]> {
+    const rows = await this.prisma.historialReserva.findMany({
+      where: { cancha: { ownerId } },
+      orderBy: { cerradaAt: 'desc' },
+      include: historialInclude,
+    })
+    return rows.map(toHistorialView)
+  }
+
+  /**
+   * The owner says the refund was made (outside the app). Answers the same when it was already
+   * marked; refuses when the record had nothing to return.
+   */
+  async markRefunded(
+    ownerId: string,
+    historialId: string,
+    now: Date = new Date()
+  ): Promise<HistorialView> {
+    const updated = await this.prisma.historialReserva.updateMany({
+      where: { id: historialId, devolucion: 'PENDIENTE', cancha: { ownerId } },
+      data: { devolucion: 'HECHA', devueltoAt: now },
+    })
+    const row = await this.prisma.historialReserva.findFirst({
+      where: { id: historialId, cancha: { ownerId } },
+      include: historialInclude,
+    })
+    // Another owner's record answers 404 so its existence is not revealed.
+    if (!row) throw new NotFoundException('El registro no existe')
+    if (updated.count === 0 && row.devolucion === 'NO_CORRESPONDE') {
+      throw new ConflictException('Esa reserva no tenía nada para devolver')
+    }
+    return toHistorialView(row)
   }
 }

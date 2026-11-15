@@ -1,10 +1,11 @@
-import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post } from '@nestjs/common'
+import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post } from '@nestjs/common'
 import type { AuthUser } from '../auth/auth.types.js'
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js'
 import { Roles } from '../auth/decorators/roles.decorator.js'
 import { CreateReservaDto } from './dto/create-reserva.dto.js'
 import {
   type CancelResult,
+  type HistorialView,
   type OwnerReservaView,
   type ReservaView,
   ReservasService,
@@ -30,6 +31,21 @@ export class ReservasController {
   @Roles('OWNER')
   listForOwner(@CurrentUser() user: AuthUser): Promise<OwnerReservaView[]> {
     return this.reservas.listForOwner(user.id)
+  }
+
+  @Get('owner/historial')
+  @Roles('OWNER')
+  listHistorial(@CurrentUser() user: AuthUser): Promise<HistorialView[]> {
+    return this.reservas.listHistorial(user.id)
+  }
+
+  @Patch('historial/:id/devolucion')
+  @Roles('OWNER')
+  markRefunded(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string
+  ): Promise<HistorialView> {
+    return this.reservas.markRefunded(user.id, id)
   }
 
   @Post(':id/cancelar')
