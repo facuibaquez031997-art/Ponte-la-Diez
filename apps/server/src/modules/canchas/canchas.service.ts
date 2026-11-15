@@ -73,6 +73,16 @@ export class CanchasService {
       if (booked > 0) {
         throw new ConflictException('No se puede borrar una cancha con reservas')
       }
+      // The history of a court is deleted with it. Keep it while it holds money that was paid:
+      // a refund may still be pending and the payment id would be lost.
+      const withMoney = await tx.historialReserva.count({
+        where: { canchaId: id, montoPagado: { gt: 0 } },
+      })
+      if (withMoney > 0) {
+        throw new ConflictException(
+          'No se puede borrar una cancha con cobros o devoluciones en su historial'
+        )
+      }
       const fotos = await tx.canchaFoto.findMany({
         where: { canchaId: id },
         select: { publicId: true },

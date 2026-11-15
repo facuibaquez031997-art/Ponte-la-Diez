@@ -26,6 +26,7 @@ const makePrisma = () => {
       deleteMany: vi.fn(async (_args?: object) => ({ count: 0 })),
     },
     canchaFoto: { findMany: vi.fn(async (_args?: object) => [] as unknown[]) },
+    historialReserva: { count: vi.fn(async (_args?: object) => 0) },
     $transaction: vi.fn(),
   }
   prisma.$transaction.mockImplementation(async (run: (tx: unknown) => unknown) => run(prisma))
@@ -144,6 +145,27 @@ describe('CanchasService', () => {
     prisma.turno.count.mockResolvedValue(1)
     await expect(service.remove('owner1', 'c1')).rejects.toBeInstanceOf(ConflictException)
     expect(prisma.cancha.delete).not.toHaveBeenCalled()
+  })
+
+  it('refuses to delete a court whose history has money paid, a refund may still be pending', async () => {
+    const { service, prisma, fotos } = makeService()
+    prisma.cancha.findUnique.mockResolvedValue({ id: 'c1', ownerId: 'owner1' })
+    prisma.historialReserva.count.mockResolvedValue(1)
+    await expect(service.remove('owner1', 'c1')).rejects.toBeInstanceOf(ConflictException)
+    expect(prisma.historialReserva.count).toHaveBeenCalledWith({
+      where: { canchaId: 'c1', montoPagado: { gt: 0 } },
+    })
+    expect(prisma.cancha.delete).not.toHaveBeenCalled()
+    expect(prisma.turno.deleteMany).not.toHaveBeenCalled()
+    expect(fotos.destroyAssets).not.toHaveBeenCalled()
+  })
+
+  it('still deletes a court whose history only has bookings nobody paid', async () => {
+    const { service, prisma } = makeService()
+    prisma.cancha.findUnique.mockResolvedValue({ id: 'c1', ownerId: 'owner1' })
+    prisma.historialReserva.count.mockResolvedValue(0)
+    await service.remove('owner1', 'c1')
+    expect(prisma.cancha.delete).toHaveBeenCalledWith({ where: { id: 'c1' } })
   })
 
   it("refuses to delete another owner's court", async () => {
