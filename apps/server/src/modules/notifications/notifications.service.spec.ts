@@ -472,6 +472,7 @@ describe('NotificationsService.notifyBookingConfirmed', () => {
       userId: 'owner-1',
       reservaId: 'r1',
       titulo: 'Reserva confirmada',
+      url: '/dueno/reservas',
     })
     expect(data[0]).not.toHaveProperty('convocatoriaId')
   })
@@ -534,6 +535,72 @@ describe('NotificationsService.notifyBookingConfirmed', () => {
     )
 
     await service.notifyBookingConfirmed('r1')
+
+    expect(prisma.notificacion.createMany).not.toHaveBeenCalled()
+    expect(push.send).not.toHaveBeenCalled()
+  })
+})
+
+describe('NotificationsService.notifyBookingCancelled', () => {
+  const data = {
+    jugadorId: 'u1',
+    canchaNombre: 'El Mate',
+    turnoInicio: new Date('2026-11-15T20:00:00.000Z'),
+    montoPagado: 5000,
+  }
+
+  it('tells the player, opening Mis reservas, with the amount that must be returned', async () => {
+    const { prisma, service } = makeDeps()
+    prisma.user.findUnique.mockResolvedValue({ id: 'u1', subscriptions: [sub('p1')] })
+
+    await service.notifyBookingCancelled(data)
+
+    const created = prisma.notificacion.createMany.mock.calls[0][0] as {
+      data: Array<{ userId: string; titulo: string; cuerpo: string; url: string }>
+    }
+    expect(created.data).toHaveLength(1)
+    expect(created.data[0]).toMatchObject({
+      userId: 'u1',
+      titulo: 'Turno cancelado',
+      url: '/reservas',
+    })
+    expect(created.data[0].cuerpo).toContain('El Mate')
+    expect(created.data[0].cuerpo).toContain('17:00')
+    expect(created.data[0].cuerpo).toContain('5.000')
+    expect(created.data[0].cuerpo).toContain('devolución')
+  })
+
+  it('says nothing was charged when the player had not paid', async () => {
+    const { prisma, service } = makeDeps()
+    prisma.user.findUnique.mockResolvedValue({ id: 'u1', subscriptions: [] })
+
+    await service.notifyBookingCancelled({ ...data, montoPagado: 0 })
+
+    const created = prisma.notificacion.createMany.mock.calls[0][0] as {
+      data: Array<{ cuerpo: string }>
+    }
+    expect(created.data[0].cuerpo).toContain('No se te cobró nada')
+    expect(created.data[0].cuerpo).not.toContain('devolución')
+  })
+
+  it('sends the push to the devices of the player', async () => {
+    const { prisma, push, service } = makeDeps()
+    prisma.user.findUnique.mockResolvedValue({ id: 'u1', subscriptions: [sub('p1'), sub('p2')] })
+
+    await service.notifyBookingCancelled(data)
+
+    expect(push.send).toHaveBeenCalledTimes(2)
+    expect(push.send).toHaveBeenCalledWith(
+      expect.objectContaining({ endpoint: 'p1' }),
+      expect.objectContaining({ title: 'Turno cancelado', url: '/reservas' })
+    )
+  })
+
+  it('does nothing when the player no longer exists', async () => {
+    const { prisma, push, service } = makeDeps()
+    prisma.user.findUnique.mockResolvedValue(null)
+
+    await service.notifyBookingCancelled(data)
 
     expect(prisma.notificacion.createMany).not.toHaveBeenCalled()
     expect(push.send).not.toHaveBeenCalled()

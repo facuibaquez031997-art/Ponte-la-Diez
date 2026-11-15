@@ -16,6 +16,7 @@ const INBOX_PAGE_SIZE = 50
 const CONVOCATORIAS_URL = '/convocatorias'
 const CONTACTOS_URL = '/contactos'
 const OWNER_RESERVAS_URL = '/dueno/reservas'
+const PLAYER_RESERVAS_URL = '/reservas'
 
 const POSICION_LABEL: Record<Posicion, string> = {
   ARQUERO: 'arquero',
@@ -169,9 +170,40 @@ export class NotificationsService {
     const cuerpo = `${reserva.user.nombre} reservó ${cancha.nombre} el ${formatSlotLabel(reserva.turno.fechaHoraInicio)}. ${paid}`
 
     await this.prisma.notificacion.createMany({
-      data: [{ userId: cancha.ownerId, reservaId: reserva.id, titulo, cuerpo }],
+      data: [
+        { userId: cancha.ownerId, reservaId: reserva.id, titulo, cuerpo, url: OWNER_RESERVAS_URL },
+      ],
     })
     await this.sendPush(cancha.owner.subscriptions, titulo, cuerpo, OWNER_RESERVAS_URL)
+  }
+
+  /**
+   * Tells the player that the owner cancelled their turn. The booking is already gone, so the
+   * notification is not linked to it: it just opens "Mis reservas".
+   */
+  async notifyBookingCancelled(data: {
+    jugadorId: string
+    canchaNombre: string
+    turnoInicio: Date
+    montoPagado: number
+  }): Promise<void> {
+    const jugador = await this.prisma.user.findUnique({
+      where: { id: data.jugadorId },
+      include: { subscriptions: true },
+    })
+    if (!jugador) return
+
+    const refund =
+      data.montoPagado > 0
+        ? `Te corresponde la devolución de ${formatPesos(data.montoPagado)}: el dueño la va a coordinar con vos.`
+        : 'No se te cobró nada.'
+    const titulo = 'Turno cancelado'
+    const cuerpo = `${data.canchaNombre} canceló tu turno del ${formatSlotLabel(data.turnoInicio)}. ${refund}`
+
+    await this.prisma.notificacion.createMany({
+      data: [{ userId: jugador.id, titulo, cuerpo, url: PLAYER_RESERVAS_URL }],
+    })
+    await this.sendPush(jugador.subscriptions, titulo, cuerpo, PLAYER_RESERVAS_URL)
   }
 
   private async findAudience(convocatoria: {

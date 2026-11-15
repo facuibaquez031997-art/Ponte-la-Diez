@@ -2,10 +2,12 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common'
-import type { Cancha, Pago, Reserva, ReservaState, Turno } from '@prisma/client'
+import type { Cancha, EstadoDevolucion, Pago, Reserva, ReservaState, Turno } from '@prisma/client'
 import { PrismaService } from '../../common/prisma/prisma.service.js'
+import { NotificationsService } from '../notifications/notifications.service.js'
 import type { CreateReservaDto } from './dto/create-reserva.dto.js'
 import { HOLD_MS, releaseExpiredHolds } from './holds.js'
 
@@ -84,9 +86,21 @@ function toOwnerView(reserva: StoredOwnerReserva): OwnerReservaView {
   }
 }
 
+export interface CancelResult {
+  historialId: string
+  /** What the player paid online and is entitled to get back from the owner. */
+  montoPagado: number
+  devolucion: EstadoDevolucion
+}
+
 @Injectable()
 export class ReservasService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(ReservasService.name)
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService
+  ) {}
 
   async create(
     userId: string,
@@ -144,5 +158,84 @@ export class ReservasService {
       include: ownerInclude,
     })
     return reservas.map(toOwnerView)
+  }
+
+  /**
+   * The owner cancels a booking that has not started (for example nobody can play). The slot goes
+   * back to FREE and a history record keeps what was paid: the refund is made by the owner outside
+   * the app and stays "pending" until the owner marks it as done.
+   */
+  async cancelByOwner(
+    ownerId: string,
+    reservaId: string,
+    now: Date = new Date()
+  ): Promise<CancelResult> {
+    const reserva = await this.prisma.reserva.findUnique({
+      where: { id: reservaId },
+      include: { turno: { include: { cancha: true } } },
+    })
+    // Another owner's booking answers 404 so its existence is not revealed.
+    if (!reserva || reserva.turno.cancha.ownerId !== ownerId) {
+      throw new NotFoundException('La reserva no existe')
+    }
+    if (reserva.turno.fechaHoraInicio <= now) {
+      throw new ConflictException('El turno ya empezó: no se puede cancelar')
+    }
+    if (reserva.estado !== 'PENDING' && reserva.estado !== 'CONFIRMED') {
+      throw new ConflictException('La reserva ya no está activa')
+    }
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      // Compare and set on the state that was read: a webhook confirming the booking at the same
+      // moment either wins before this point (and we stop) or finds nothing to confirm after it.
+      const claimed = await tx.reserva.updateMany({
+        where: { id: reserva.id, estado: reserva.estado },
+        data: { estado: 'CANCELLED' },
+      })
+      if (claimed.count === 0) {
+        throw new ConflictException(
+          'La reserva cambió mientras la cancelabas: revisala y probá de nuevo'
+        )
+      }
+
+      const pago = await tx.pago.findUnique({ where: { reservaId: reserva.id } })
+      const montoPagado = pago?.estadoPago === 'APPROVED' ? pago.monto : 0
+      const devolucion: EstadoDevolucion = montoPagado > 0 ? 'PENDIENTE' : 'NO_CORRESPONDE'
+
+      const historial = await tx.historialReserva.create({
+        data: {
+          canchaId: reserva.turno.canchaId,
+          jugadorId: reserva.userId,
+          turnoInicio: reserva.turno.fechaHoraInicio,
+          turnoFin: reserva.turno.fechaHoraFin,
+          montoTotal: reserva.montoTotal,
+          montoPagado,
+          mpPaymentId: pago?.mpPaymentId ?? null,
+          motivo: 'CANCELADA_DUENO',
+          devolucion,
+          reservadaAt: reserva.createdAt,
+        },
+      })
+      await tx.pago.deleteMany({ where: { reservaId: reserva.id } })
+      await tx.reserva.delete({ where: { id: reserva.id } })
+      await tx.turno.update({ where: { id: reserva.turnoId }, data: { estado: 'FREE' } })
+      return { historialId: historial.id, montoPagado, devolucion }
+    })
+
+    // The cancellation already happened: a failed notice must not undo or hide it.
+    try {
+      await this.notifications.notifyBookingCancelled({
+        jugadorId: reserva.userId,
+        canchaNombre: reserva.turno.cancha.nombre,
+        turnoInicio: reserva.turno.fechaHoraInicio,
+        montoPagado: result.montoPagado,
+      })
+    } catch (error) {
+      this.logger.error(
+        `Could not tell the player about the cancelled booking ${reserva.id}`,
+        error
+      )
+    }
+    return result
   }
 }

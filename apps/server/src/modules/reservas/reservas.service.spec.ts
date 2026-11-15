@@ -32,11 +32,16 @@ const stored = (pago: object | null, estado = 'PENDING') => ({
   pago,
 })
 
+const makeNotifications = () => ({
+  notifyBookingCancelled: vi.fn(async (_data?: object) => undefined),
+})
+
 const makePrisma = () => {
   const prisma = {
     turno: {
       findUnique: vi.fn(async (_args?: object) => turno() as unknown),
       updateMany: vi.fn(async (_args?: object) => ({ count: 1 })),
+      update: vi.fn(async (_args?: object) => ({})),
     },
     reserva: {
       create: vi.fn(
@@ -44,8 +49,14 @@ const makePrisma = () => {
       ),
       findMany: vi.fn(async (_args?: object) => [] as unknown[]),
       deleteMany: vi.fn(async (_args?: object) => ({ count: 1 })),
+      findUnique: vi.fn(async (_args?: object) => null as unknown),
+      updateMany: vi.fn(async (_args?: object) => ({ count: 1 })),
+      delete: vi.fn(async (_args?: object) => ({})),
     },
-    pago: { deleteMany: vi.fn(async (_args?: object) => ({ count: 0 })) },
+    pago: {
+      deleteMany: vi.fn(async (_args?: object) => ({ count: 0 })),
+      findUnique: vi.fn(async (_args?: object) => null as unknown),
+    },
     historialReserva: { create: vi.fn(async (_args?: object) => ({})) },
     $transaction: vi.fn(async (arg: unknown) =>
       typeof arg === 'function'
@@ -62,7 +73,7 @@ const createArgs = (prisma: ReturnType<typeof makePrisma>) =>
 describe('ReservasService.create', () => {
   it('books the slot with the seña: PENDING booking, PENDING payment of the seña, full price as total', async () => {
     const prisma = makePrisma()
-    await new ReservasService(prisma as never).create(
+    await new ReservasService(prisma as never, makeNotifications() as never).create(
       'u1',
       { turnoId: 't1', tipoPago: 'SENA' },
       now
@@ -80,7 +91,7 @@ describe('ReservasService.create', () => {
 
   it('charges the full price when the player chooses TOTAL', async () => {
     const prisma = makePrisma()
-    await new ReservasService(prisma as never).create(
+    await new ReservasService(prisma as never, makeNotifications() as never).create(
       'u1',
       { turnoId: 't1', tipoPago: 'TOTAL' },
       now
@@ -90,7 +101,7 @@ describe('ReservasService.create', () => {
 
   it('answers what is charged now and what stays to pay at the court', async () => {
     const prisma = makePrisma()
-    const view = await new ReservasService(prisma as never).create(
+    const view = await new ReservasService(prisma as never, makeNotifications() as never).create(
       'u1',
       { turnoId: 't1', tipoPago: 'SENA' },
       now
@@ -110,7 +121,11 @@ describe('ReservasService.create', () => {
     const prisma = makePrisma()
     prisma.turno.updateMany.mockResolvedValue({ count: 0 })
     await expect(
-      new ReservasService(prisma as never).create('u1', { turnoId: 't1', tipoPago: 'SENA' }, now)
+      new ReservasService(prisma as never, makeNotifications() as never).create(
+        'u1',
+        { turnoId: 't1', tipoPago: 'SENA' },
+        now
+      )
     ).rejects.toBeInstanceOf(ConflictException)
     expect(prisma.reserva.create).not.toHaveBeenCalled()
   })
@@ -119,7 +134,11 @@ describe('ReservasService.create', () => {
     const prisma = makePrisma()
     prisma.turno.findUnique.mockResolvedValue(null)
     await expect(
-      new ReservasService(prisma as never).create('u1', { turnoId: 't1', tipoPago: 'SENA' }, now)
+      new ReservasService(prisma as never, makeNotifications() as never).create(
+        'u1',
+        { turnoId: 't1', tipoPago: 'SENA' },
+        now
+      )
     ).rejects.toBeInstanceOf(NotFoundException)
   })
 
@@ -129,7 +148,11 @@ describe('ReservasService.create', () => {
       turno({ fechaHoraInicio: new Date('2026-11-14T14:00:00.000Z') })
     )
     await expect(
-      new ReservasService(prisma as never).create('u1', { turnoId: 't1', tipoPago: 'SENA' }, now)
+      new ReservasService(prisma as never, makeNotifications() as never).create(
+        'u1',
+        { turnoId: 't1', tipoPago: 'SENA' },
+        now
+      )
     ).rejects.toBeInstanceOf(BadRequestException)
     expect(prisma.turno.updateMany).not.toHaveBeenCalled()
   })
@@ -138,7 +161,11 @@ describe('ReservasService.create', () => {
     const prisma = makePrisma()
     prisma.turno.findUnique.mockResolvedValue(turno({ cancha: { ...cancha, montoSena: 0 } }))
     await expect(
-      new ReservasService(prisma as never).create('u1', { turnoId: 't1', tipoPago: 'SENA' }, now)
+      new ReservasService(prisma as never, makeNotifications() as never).create(
+        'u1',
+        { turnoId: 't1', tipoPago: 'SENA' },
+        now
+      )
     ).rejects.toBeInstanceOf(BadRequestException)
     expect(prisma.turno.updateMany).not.toHaveBeenCalled()
   })
@@ -155,7 +182,7 @@ describe('ReservasService.create', () => {
         turno: { canchaId: 'c1', fechaHoraInicio: future, fechaHoraFin: future },
       },
     ])
-    await new ReservasService(prisma as never).create(
+    await new ReservasService(prisma as never, makeNotifications() as never).create(
       'u1',
       { turnoId: 't1', tipoPago: 'SENA' },
       now
@@ -172,7 +199,7 @@ describe('ReservasService.create', () => {
 describe('ReservasService.listMine', () => {
   it('lists only my bookings, newest slot first', async () => {
     const prisma = makePrisma()
-    await new ReservasService(prisma as never).listMine('u1', now)
+    await new ReservasService(prisma as never, makeNotifications() as never).listMine('u1', now)
     const call = prisma.reserva.findMany.mock.calls.at(-1)?.[0] as {
       where: object
       orderBy: object
@@ -187,7 +214,10 @@ describe('ReservasService.listMine', () => {
       stored({ estadoPago: 'APPROVED', monto: 5000 }, 'CONFIRMED'),
       stored({ estadoPago: 'PENDING', monto: 5000 }),
     ])
-    const views = await new ReservasService(prisma as never).listMine('u1', now)
+    const views = await new ReservasService(prisma as never, makeNotifications() as never).listMine(
+      'u1',
+      now
+    )
     expect(views[0]).toMatchObject({ montoPagado: 5000, montoRestante: 15000, montoACobrar: null })
     expect(views[1]).toMatchObject({ montoPagado: 0, montoRestante: 20000, montoACobrar: 5000 })
   })
@@ -197,7 +227,10 @@ describe('ReservasService.listMine', () => {
     prisma.reserva.findMany.mockResolvedValue([
       stored({ estadoPago: 'APPROVED', monto: 20000 }, 'CONFIRMED'),
     ])
-    const [view] = await new ReservasService(prisma as never).listMine('u1', now)
+    const [view] = await new ReservasService(
+      prisma as never,
+      makeNotifications() as never
+    ).listMine('u1', now)
     expect(view).toMatchObject({ montoPagado: 20000, montoRestante: 0 })
   })
 })
@@ -211,7 +244,7 @@ describe('ReservasService.listForOwner', () => {
 
   it('lists only the bookings of the slots of the courts of that owner, soonest first', async () => {
     const prisma = makePrisma()
-    await new ReservasService(prisma as never).listForOwner('o1', now)
+    await new ReservasService(prisma as never, makeNotifications() as never).listForOwner('o1', now)
     const call = prisma.reserva.findMany.mock.calls.at(-1)?.[0] as {
       where: object
       orderBy: object
@@ -222,7 +255,7 @@ describe('ReservasService.listForOwner', () => {
 
   it('frees the expired holds of the courts of that owner before listing', async () => {
     const prisma = makePrisma()
-    await new ReservasService(prisma as never).listForOwner('o1', now)
+    await new ReservasService(prisma as never, makeNotifications() as never).listForOwner('o1', now)
     const release = prisma.reserva.findMany.mock.calls[0][0] as { where: Record<string, unknown> }
     expect(release.where.turno).toEqual({ cancha: { ownerId: 'o1' } })
     expect(release.where.estado).toBe('PENDING')
@@ -233,7 +266,10 @@ describe('ReservasService.listForOwner', () => {
     prisma.reserva.findMany.mockResolvedValue([
       ownerBooking({ estadoPago: 'APPROVED', monto: 5000 }, 'CONFIRMED'),
     ])
-    const [view] = await new ReservasService(prisma as never).listForOwner('o1', now)
+    const [view] = await new ReservasService(
+      prisma as never,
+      makeNotifications() as never
+    ).listForOwner('o1', now)
     expect(view).toMatchObject({
       id: 'r1',
       estado: 'CONFIRMED',
@@ -254,7 +290,10 @@ describe('ReservasService.listForOwner', () => {
         user: { nombre: 'Ana', avatarUrl: null, email: 'ana@mail.com', telefono: '1155' },
       },
     ])
-    const [view] = await new ReservasService(prisma as never).listForOwner('o1', now)
+    const [view] = await new ReservasService(
+      prisma as never,
+      makeNotifications() as never
+    ).listForOwner('o1', now)
     expect(view.jugador).toEqual({ nombre: 'Ana', avatarUrl: null })
     expect(JSON.stringify(view)).not.toContain('ana@mail.com')
     expect(JSON.stringify(view)).not.toContain('1155')
@@ -266,8 +305,154 @@ describe('ReservasService.listForOwner', () => {
     prisma.reserva.findMany.mockResolvedValue([
       ownerBooking({ estadoPago: 'PENDING', monto: 5000 }, 'PENDING', createdAt),
     ])
-    const [view] = await new ReservasService(prisma as never).listForOwner('o1', now)
+    const [view] = await new ReservasService(
+      prisma as never,
+      makeNotifications() as never
+    ).listForOwner('o1', now)
     expect(view.expiraEl).toEqual(new Date('2026-11-14T15:10:00.000Z'))
     expect(view).toMatchObject({ montoPagado: 0, montoACobrar: 5000 })
+  })
+})
+
+describe('ReservasService.cancelByOwner', () => {
+  const startsAt = new Date('2026-11-15T20:00:00.000Z')
+  const bookedAt = new Date('2026-11-14T14:50:00.000Z')
+
+  const booking = (overrides: object = {}) => ({
+    id: 'r1',
+    userId: 'u1',
+    estado: 'CONFIRMED',
+    montoTotal: 20000,
+    createdAt: bookedAt,
+    turnoId: 't1',
+    turno: {
+      id: 't1',
+      canchaId: 'c1',
+      fechaHoraInicio: startsAt,
+      fechaHoraFin: new Date(startsAt.getTime() + 3_600_000),
+      cancha: { id: 'c1', nombre: 'El Mate', ownerId: 'o1' },
+    },
+    ...overrides,
+  })
+  const approvedPago = { estadoPago: 'APPROVED', monto: 5000, mpPaymentId: '189744906496' }
+
+  const setup = (reserva: unknown = booking(), pago: unknown = approvedPago) => {
+    const prisma = makePrisma()
+    const notifications = makeNotifications()
+    prisma.reserva.findUnique.mockResolvedValue(reserva)
+    prisma.pago.findUnique.mockResolvedValue(pago)
+    return {
+      prisma,
+      notifications,
+      service: new ReservasService(prisma as never, notifications as never),
+    }
+  }
+
+  it('cancels a paid booking: history with the refund pending, booking gone, slot FREE', async () => {
+    const { prisma, service } = setup()
+    const result = await service.cancelByOwner('o1', 'r1', now)
+
+    expect(prisma.reserva.updateMany).toHaveBeenCalledWith({
+      where: { id: 'r1', estado: 'CONFIRMED' },
+      data: { estado: 'CANCELLED' },
+    })
+    expect(prisma.historialReserva.create).toHaveBeenCalledWith({
+      data: {
+        canchaId: 'c1',
+        jugadorId: 'u1',
+        turnoInicio: startsAt,
+        turnoFin: new Date(startsAt.getTime() + 3_600_000),
+        montoTotal: 20000,
+        montoPagado: 5000,
+        mpPaymentId: '189744906496',
+        motivo: 'CANCELADA_DUENO',
+        devolucion: 'PENDIENTE',
+        reservadaAt: bookedAt,
+      },
+    })
+    expect(prisma.pago.deleteMany).toHaveBeenCalledWith({ where: { reservaId: 'r1' } })
+    expect(prisma.reserva.delete).toHaveBeenCalledWith({ where: { id: 'r1' } })
+    expect(prisma.turno.update).toHaveBeenCalledWith({
+      where: { id: 't1' },
+      data: { estado: 'FREE' },
+    })
+    expect(result).toMatchObject({ devolucion: 'PENDIENTE', montoPagado: 5000 })
+  })
+
+  it('cancels a booking that was never paid without any refund', async () => {
+    const { prisma, service } = setup(booking({ estado: 'PENDING' }), {
+      estadoPago: 'PENDING',
+      monto: 5000,
+      mpPaymentId: null,
+    })
+    const result = await service.cancelByOwner('o1', 'r1', now)
+
+    const created = prisma.historialReserva.create.mock.calls[0][0] as {
+      data: Record<string, unknown>
+    }
+    expect(created.data).toMatchObject({
+      montoPagado: 0,
+      mpPaymentId: null,
+      motivo: 'CANCELADA_DUENO',
+      devolucion: 'NO_CORRESPONDE',
+    })
+    expect(result.devolucion).toBe('NO_CORRESPONDE')
+  })
+
+  it('tells the player which turn was cancelled and how much is to be returned', async () => {
+    const { notifications, service } = setup()
+    await service.cancelByOwner('o1', 'r1', now)
+    expect(notifications.notifyBookingCancelled).toHaveBeenCalledWith({
+      jugadorId: 'u1',
+      canchaNombre: 'El Mate',
+      turnoInicio: startsAt,
+      montoPagado: 5000,
+    })
+  })
+
+  it('still cancels when the notification fails', async () => {
+    const { notifications, service } = setup()
+    notifications.notifyBookingCancelled.mockRejectedValue(new Error('push down'))
+    await expect(service.cancelByOwner('o1', 'r1', now)).resolves.toMatchObject({
+      devolucion: 'PENDIENTE',
+    })
+  })
+
+  it('answers 404 for an unknown booking and for a court that belongs to another owner', async () => {
+    const missing = setup(null)
+    await expect(missing.service.cancelByOwner('o1', 'r1', now)).rejects.toBeInstanceOf(
+      NotFoundException
+    )
+    const other = setup()
+    await expect(other.service.cancelByOwner('another-owner', 'r1', now)).rejects.toBeInstanceOf(
+      NotFoundException
+    )
+    expect(other.prisma.reserva.updateMany).not.toHaveBeenCalled()
+    expect(other.prisma.turno.update).not.toHaveBeenCalled()
+  })
+
+  it('answers 409 for a turn that already started', async () => {
+    const { prisma, service } = setup(
+      booking({
+        turno: {
+          id: 't1',
+          canchaId: 'c1',
+          fechaHoraInicio: new Date('2026-11-14T14:00:00.000Z'),
+          fechaHoraFin: new Date('2026-11-14T15:30:00.000Z'),
+          cancha: { id: 'c1', nombre: 'El Mate', ownerId: 'o1' },
+        },
+      })
+    )
+    await expect(service.cancelByOwner('o1', 'r1', now)).rejects.toBeInstanceOf(ConflictException)
+    expect(prisma.reserva.updateMany).not.toHaveBeenCalled()
+  })
+
+  it('answers 409 and writes nothing when the booking changed meanwhile', async () => {
+    const { prisma, notifications, service } = setup()
+    prisma.reserva.updateMany.mockResolvedValue({ count: 0 })
+    await expect(service.cancelByOwner('o1', 'r1', now)).rejects.toBeInstanceOf(ConflictException)
+    expect(prisma.historialReserva.create).not.toHaveBeenCalled()
+    expect(prisma.turno.update).not.toHaveBeenCalled()
+    expect(notifications.notifyBookingCancelled).not.toHaveBeenCalled()
   })
 })
