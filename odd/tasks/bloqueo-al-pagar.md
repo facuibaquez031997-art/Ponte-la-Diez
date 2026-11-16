@@ -11,7 +11,7 @@ Branch: feat/bloqueo-al-pagar (from feat/canchas-compartidas, because it changes
 ## Tasks
 
 - [ ] T1 S1 S3 S4 · inline · server: links per court (migration), blocking only by CONFIRMED bookings, booking/list/agenda/offers by court, `comparteCon` with court numbers (create/update/list), tests · commit: see git log "links per court" (server suite 521 green, tsc clean)
-- [ ] T2 S2 · inline · server: the payment confirmation checks the link under the same lock and closes the booking with the refund pending when the space was taken (new reason), the payment link is refused when the space is already taken, a notice for the player, tests · commit: -
+- [ ] T2 S2 · inline · server: the payment confirmation checks the link under the same lock and closes the booking with the refund pending when the space was taken (new reason), the payment link is refused when the space is already taken, a notice for the player, tests · commit: see git log "payment confirmation" (server suite 535 green, tsc clean)
 - [ ] T3 S2 S3 · inline · client: the form chooses which court of each entry is linked, the card says it, the owner history shows the new reason · commit: -
 - [ ] T4 · inline · live check against the real database (the 5 courts of 11 with one divided, the payment race between linked courts with the real confirmation code), docs and pending list · commit: -
 

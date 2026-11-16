@@ -11,10 +11,11 @@ import { formatSlotLabel } from '../../common/format.js'
 import { PrismaService } from '../../common/prisma/prisma.service.js'
 import { NotificationsService } from '../notifications/notifications.service.js'
 import { HOLD_MS, releaseExpiredHolds } from '../reservas/holds.js'
+import { findBlocked } from '../turnos/conflicts.js'
 import { MercadoPagoGateway, type PreferenceResult } from './mercadopago.gateway.js'
 import { verifyWebhookSignature } from './webhook-signature.js'
 
-export type NotificationResult = 'confirmed' | 'duplicate' | 'ignored'
+export type NotificationResult = 'confirmed' | 'duplicate' | 'ignored' | 'conflict'
 
 export interface WebhookRequest {
   xSignature?: string
@@ -56,6 +57,18 @@ export class PagosService {
     if (expiresAt <= now) {
       await releaseExpiredHolds(this.prisma, now, { userId })
       throw new ConflictException('La reserva venció, elegí el turno de nuevo')
+    }
+
+    // A court that shares the space was confirmed meanwhile: do not let the player pay in vain.
+    const { turno } = reserva
+    const blocked = await findBlocked(this.prisma, [turno.canchaId], {
+      gte: turno.fechaHoraInicio,
+      lte: turno.fechaHoraInicio,
+    })
+    if (blocked.of(turno.canchaId, turno.fechaHoraInicio, turno.numero)) {
+      throw new ConflictException(
+        'Ese horario ya no está disponible: otra cancha que comparte el espacio ya está confirmada'
+      )
     }
 
     let preference: PreferenceResult
@@ -110,9 +123,16 @@ export class PagosService {
 
     const reserva = await this.prisma.reserva.findUnique({
       where: { id: payment.externalReference },
-      include: { pago: true },
+      include: { pago: true, turno: { include: { cancha: true } } },
     })
     if (!reserva?.pago) {
+      // A booking closed because the space was confirmed for another court first is already dealt
+      // with (its refund is pending): a retried notification of that payment changes nothing.
+      const closed = await this.prisma.historialReserva.findFirst({
+        where: { mpPaymentId: payment.id },
+        select: { id: true },
+      })
+      if (closed) return 'duplicate'
       this.logger.error(
         `Payment ${payment.id} was approved but booking ${payment.externalReference} no longer exists: needs a manual refund`
       )
@@ -128,26 +148,95 @@ export class PagosService {
     }
 
     const pagoId = reserva.pago.id
-    const confirmed = await this.prisma.$transaction(async (tx) => {
-      const claimed = await tx.reserva.updateMany({
-        where: { id: reserva.id, estado: 'PENDING' },
-        data: { estado: 'CONFIRMED' },
-      })
-      if (claimed.count === 0) return false
-      await tx.pago.update({
-        where: { id: pagoId },
-        data: { estadoPago: 'APPROVED', mpPaymentId: payment.id },
-      })
-      return true
-    })
-    if (!confirmed) {
+    const { turno } = reserva
+    const outcome = await this.prisma.$transaction(
+      async (tx): Promise<'confirmed' | 'conflict' | 'ignored'> => {
+        // The same lock the bookings take: the payments of two linked courts for the same hour
+        // wait for each other, so the first one to be confirmed wins the shared space.
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${turno.cancha.ownerId}), hashtext(${turno.fechaHoraInicio.toISOString()}))`
+        const blocked = await findBlocked(tx, [turno.canchaId], {
+          gte: turno.fechaHoraInicio,
+          lte: turno.fechaHoraInicio,
+        })
+        const taken = blocked.of(turno.canchaId, turno.fechaHoraInicio, turno.numero) !== undefined
+
+        const claimed = await tx.reserva.updateMany({
+          where: { id: reserva.id, estado: 'PENDING' },
+          data: { estado: taken ? 'CANCELLED' : 'CONFIRMED' },
+        })
+        if (claimed.count === 0) return 'ignored'
+
+        if (!taken) {
+          await tx.pago.update({
+            where: { id: pagoId },
+            data: { estadoPago: 'APPROVED', mpPaymentId: payment.id },
+          })
+          return 'confirmed'
+        }
+
+        // A court that shares the space was confirmed first. The payment was approved, so the
+        // booking is closed with the refund pending (like when the owner cancels) and its slot is
+        // freed, instead of confirming two bookings for the same ground.
+        await tx.historialReserva.create({
+          data: {
+            canchaId: turno.canchaId,
+            jugadorId: reserva.userId,
+            turnoInicio: turno.fechaHoraInicio,
+            turnoFin: turno.fechaHoraFin,
+            montoTotal: reserva.montoTotal,
+            montoPagado: payment.transactionAmount,
+            mpPaymentId: payment.id,
+            motivo: 'ESPACIO_OCUPADO',
+            devolucion: 'PENDIENTE',
+            reservadaAt: reserva.createdAt,
+          },
+        })
+        await tx.pago.deleteMany({ where: { reservaId: reserva.id } })
+        await tx.reserva.delete({ where: { id: reserva.id } })
+        await tx.turno.update({ where: { id: reserva.turnoId }, data: { estado: 'FREE' } })
+        return 'conflict'
+      }
+    )
+
+    if (outcome === 'ignored') {
       this.logger.error(
         `Payment ${payment.id} was approved but booking ${reserva.id} is not PENDING anymore: needs a manual review`
       )
       return 'ignored'
     }
+    if (outcome === 'conflict') {
+      this.logger.warn(
+        `Payment ${payment.id} was approved but the space of booking ${reserva.id} was confirmed for a court that shares it first: closed, refund pending`
+      )
+      await this.notifySpaceTaken(
+        reserva.userId,
+        turno.cancha.nombre,
+        turno.fechaHoraInicio,
+        payment.transactionAmount
+      )
+      return 'conflict'
+    }
     await this.notifyOwner(reserva.id)
     return 'confirmed'
+  }
+
+  // Same rule as the owner's notice: it already happened, a failed notice must not fail the webhook.
+  private async notifySpaceTaken(
+    jugadorId: string,
+    canchaNombre: string,
+    turnoInicio: Date,
+    montoPagado: number
+  ): Promise<void> {
+    try {
+      await this.notifications.notifyBookingSpaceTaken({
+        jugadorId,
+        canchaNombre,
+        turnoInicio,
+        montoPagado,
+      })
+    } catch (error) {
+      this.logger.error(`Could not tell the player about the closed booking of ${jugadorId}`, error)
+    }
   }
 
   // A failed notification must never fail the webhook: Mercado Pago would retry a payment that

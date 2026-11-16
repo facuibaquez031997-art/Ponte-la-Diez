@@ -258,6 +258,31 @@ export class NotificationsService {
     })
   }
 
+  /**
+   * Tells the player that their payment was approved but the space had just been confirmed for a
+   * court that shares it, so the turn could not be kept and the refund is pending.
+   */
+  async notifyBookingSpaceTaken(data: {
+    jugadorId: string
+    canchaNombre: string
+    turnoInicio: Date
+    montoPagado: number
+  }): Promise<void> {
+    const jugador = await this.prisma.user.findUnique({
+      where: { id: data.jugadorId },
+      include: { subscriptions: true },
+    })
+    if (!jugador) return
+
+    const titulo = 'No pudimos confirmar tu turno'
+    const cuerpo = `${data.canchaNombre}: el espacio del turno del ${formatSlotLabel(data.turnoInicio)} se confirmó para otra reserva justo antes que la tuya. Te corresponde la devolución de ${formatPesos(data.montoPagado)}: el dueño la va a coordinar con vos.`
+
+    await this.prisma.notificacion.createMany({
+      data: [{ userId: jugador.id, titulo, cuerpo, url: PLAYER_RESERVAS_URL }],
+    })
+    await this.sendPush(jugador.subscriptions, titulo, cuerpo, PLAYER_RESERVAS_URL)
+  }
+
   private async findAudience(convocatoria: {
     alcance: Alcance
     creadorId: string

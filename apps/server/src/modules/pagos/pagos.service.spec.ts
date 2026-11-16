@@ -16,12 +16,17 @@ const createdAt = new Date('2026-11-14T14:55:00.000Z')
 const reserva = (overrides: object = {}) => ({
   id: 'r1',
   userId: 'u1',
+  turnoId: 't1',
   estado: 'PENDING',
+  montoTotal: 20000,
   createdAt,
   pago: { id: 'p1', estadoPago: 'PENDING', monto: 5000 },
   turno: {
+    canchaId: 'c1',
+    numero: 1,
     fechaHoraInicio: new Date('2026-11-15T20:00:00.000Z'),
-    cancha: { nombre: 'El Mate' },
+    fechaHoraFin: new Date('2026-11-15T21:00:00.000Z'),
+    cancha: { nombre: 'El Mate', ownerId: 'o1' },
   },
   ...overrides,
 })
@@ -40,8 +45,29 @@ const makePrisma = () => {
       findUnique: vi.fn(async (_args?: object) => reserva() as unknown),
       findMany: vi.fn(async (_args?: object) => [] as unknown[]),
       updateMany: vi.fn(async (_args?: object) => ({ count: 1 })),
+      delete: vi.fn(async (_args?: object) => ({})),
     },
-    pago: { update: vi.fn(async (_args?: object) => ({})) },
+    pago: {
+      update: vi.fn(async (_args?: object) => ({})),
+      deleteMany: vi.fn(async (_args?: object) => ({ count: 1 })),
+    },
+    turno: {
+      // The confirmed bookings of the courts that share the space (none unless a test adds them).
+      findMany: vi.fn(async (_args?: object) => [] as object[]),
+      update: vi.fn(async (_args?: object) => ({})),
+    },
+    canchaConflicto: {
+      findMany: vi.fn(
+        async (_args?: object) =>
+          [] as { canchaId: string; numero: number; otraCanchaId: string; otraNumero: number }[]
+      ),
+    },
+    historialReserva: {
+      create: vi.fn(async (_args?: object) => ({ id: 'h1' })),
+      findFirst: vi.fn(async (_args?: object) => null as unknown),
+    },
+    // The lock per owner and hour taken before confirming (a tagged template call).
+    $executeRaw: vi.fn(async (..._args: unknown[]) => 0),
     $transaction: vi.fn(async (arg: unknown) =>
       typeof arg === 'function'
         ? (arg as (tx: unknown) => unknown)(prisma)
@@ -63,6 +89,7 @@ const makeGateway = () => ({
 
 const makeNotifications = () => ({
   notifyBookingConfirmed: vi.fn(async (_reservaId?: string) => undefined),
+  notifyBookingSpaceTaken: vi.fn(async (_data?: object) => undefined),
 })
 
 const build = (
@@ -326,5 +353,181 @@ describe('PagosService notifies the owner of the confirmed booking', () => {
     const { service, notifications } = build()
     notifications.notifyBookingConfirmed.mockRejectedValue(new Error('push down'))
     expect(await service.handlePaymentNotification('123456')).toBe('confirmed')
+  })
+})
+
+describe('PagosService: courts that share the physical space', () => {
+  // The booking is for the court 1 of c1, which shares the space with every court of c-other.
+  const shared = (prisma: ReturnType<typeof makePrisma>, confirmedOfTheOther: object[]) => {
+    prisma.canchaConflicto.findMany.mockResolvedValue([
+      { canchaId: 'c1', numero: 0, otraCanchaId: 'c-other', otraNumero: 0 },
+    ])
+    prisma.turno.findMany.mockResolvedValue(confirmedOfTheOther)
+  }
+  const taken = [
+    { canchaId: 'c-other', numero: 1, fechaHoraInicio: new Date('2026-11-15T20:00:00.000Z') },
+  ]
+
+  describe('the payment link', () => {
+    it('is refused (409) when a court that shares the space is already confirmed, and the gateway is not called', async () => {
+      const { prisma, gateway, service } = build()
+      shared(prisma, taken)
+
+      await expect(service.createPreference('u1', 'r1', now)).rejects.toBeInstanceOf(
+        ConflictException
+      )
+
+      expect(gateway.createPreference).not.toHaveBeenCalled()
+    })
+
+    it('is given when the linked courts have nothing confirmed at that hour', async () => {
+      const { prisma, gateway, service } = build()
+      shared(prisma, [])
+
+      await service.createPreference('u1', 'r1', now)
+
+      expect(gateway.createPreference).toHaveBeenCalled()
+    })
+  })
+
+  describe('confirming an approved payment', () => {
+    it('takes the lock of the owner and the hour before it looks at the links and confirms', async () => {
+      const { prisma, service } = build()
+
+      await service.handlePaymentNotification('123456')
+
+      expect(prisma.$executeRaw).toHaveBeenCalledTimes(1)
+      const [strings, ...values] = prisma.$executeRaw.mock.calls[0] as unknown as [
+        string[],
+        ...unknown[],
+      ]
+      expect(strings.join('?')).toContain('pg_advisory_xact_lock')
+      expect(values).toEqual(['o1', '2026-11-15T20:00:00.000Z'])
+      expect(prisma.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(
+        prisma.reserva.updateMany.mock.invocationCallOrder[0]
+      )
+    })
+
+    it('confirms as before when no court that shares the space is confirmed', async () => {
+      const { prisma, notifications, service } = build()
+      shared(prisma, [])
+
+      await expect(service.handlePaymentNotification('123456')).resolves.toBe('confirmed')
+
+      expect(prisma.reserva.updateMany).toHaveBeenCalledWith({
+        where: { id: 'r1', estado: 'PENDING' },
+        data: { estado: 'CONFIRMED' },
+      })
+      expect(prisma.pago.update).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: { estadoPago: 'APPROVED', mpPaymentId: '123456' },
+      })
+      expect(notifications.notifyBookingConfirmed).toHaveBeenCalledWith('r1')
+      expect(prisma.historialReserva.create).not.toHaveBeenCalled()
+    })
+
+    describe('when a court that shares the space was confirmed first', () => {
+      it('does not confirm: it closes the booking with the refund pending', async () => {
+        const { prisma, service } = build()
+        shared(prisma, taken)
+
+        await expect(service.handlePaymentNotification('123456')).resolves.toBe('conflict')
+
+        expect(prisma.reserva.updateMany).toHaveBeenCalledWith({
+          where: { id: 'r1', estado: 'PENDING' },
+          data: { estado: 'CANCELLED' },
+        })
+        expect(prisma.pago.update).not.toHaveBeenCalled()
+        expect(prisma.historialReserva.create).toHaveBeenCalledWith({
+          data: {
+            canchaId: 'c1',
+            jugadorId: 'u1',
+            turnoInicio: new Date('2026-11-15T20:00:00.000Z'),
+            turnoFin: new Date('2026-11-15T21:00:00.000Z'),
+            montoTotal: 20000,
+            montoPagado: 5000,
+            mpPaymentId: '123456',
+            motivo: 'ESPACIO_OCUPADO',
+            devolucion: 'PENDIENTE',
+            reservadaAt: createdAt,
+          },
+        })
+      })
+
+      it('removes the booking and its payment and frees the slot', async () => {
+        const { prisma, service } = build()
+        shared(prisma, taken)
+
+        await service.handlePaymentNotification('123456')
+
+        expect(prisma.pago.deleteMany).toHaveBeenCalledWith({ where: { reservaId: 'r1' } })
+        expect(prisma.reserva.delete).toHaveBeenCalledWith({ where: { id: 'r1' } })
+        expect(prisma.turno.update).toHaveBeenCalledWith({
+          where: { id: 't1' },
+          data: { estado: 'FREE' },
+        })
+      })
+
+      it('keeps the money that was really paid as the refund, not the amount that was charged', async () => {
+        const { prisma, gateway, service } = build()
+        gateway.getPayment.mockResolvedValue(payment({ transactionAmount: 20000 }))
+        shared(prisma, taken)
+
+        await service.handlePaymentNotification('123456')
+
+        const call = prisma.historialReserva.create.mock.calls[0][0] as {
+          data: { montoPagado: number }
+        }
+        expect(call.data.montoPagado).toBe(20000)
+      })
+
+      it('tells the player, with what they paid, and does not tell the owner it was confirmed', async () => {
+        const { prisma, notifications, service } = build()
+        shared(prisma, taken)
+
+        await service.handlePaymentNotification('123456')
+
+        expect(notifications.notifyBookingSpaceTaken).toHaveBeenCalledWith({
+          jugadorId: 'u1',
+          canchaNombre: 'El Mate',
+          turnoInicio: new Date('2026-11-15T20:00:00.000Z'),
+          montoPagado: 5000,
+        })
+        expect(notifications.notifyBookingConfirmed).not.toHaveBeenCalled()
+      })
+
+      it('still answers the webhook when the notice to the player fails', async () => {
+        const { prisma, notifications, service } = build()
+        shared(prisma, taken)
+        notifications.notifyBookingSpaceTaken.mockRejectedValue(new Error('push down'))
+
+        await expect(service.handlePaymentNotification('123456')).resolves.toBe('conflict')
+      })
+
+      it('does nothing when the booking changed meanwhile (it is not PENDING anymore)', async () => {
+        const { prisma, service } = build()
+        shared(prisma, taken)
+        prisma.reserva.updateMany.mockResolvedValue({ count: 0 })
+
+        await expect(service.handlePaymentNotification('123456')).resolves.toBe('ignored')
+
+        expect(prisma.historialReserva.create).not.toHaveBeenCalled()
+        expect(prisma.reserva.delete).not.toHaveBeenCalled()
+      })
+
+      it('a retried notification of that same payment is a duplicate, not an error to review', async () => {
+        const { prisma, service } = build()
+        // The booking is gone (it was closed); its history keeps the payment id.
+        prisma.reserva.findUnique.mockResolvedValue(null)
+        prisma.historialReserva.findFirst.mockResolvedValue({ id: 'h1' })
+
+        await expect(service.handlePaymentNotification('123456')).resolves.toBe('duplicate')
+
+        expect(prisma.historialReserva.findFirst).toHaveBeenCalledWith({
+          where: { mpPaymentId: '123456' },
+          select: { id: true },
+        })
+      })
+    })
   })
 })
