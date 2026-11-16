@@ -767,3 +767,86 @@ describe('NotificationsService.notifyBookingSpaceTaken', () => {
     expect(push.send).not.toHaveBeenCalled()
   })
 })
+
+describe('NotificationsService.notifyOwnerSpaceTaken', () => {
+  const data = {
+    ownerId: 'o1',
+    jugadorId: 'u1',
+    canchaNombre: 'El Mate',
+    turnoInicio: new Date('2026-11-15T20:00:00.000Z'),
+    montoPagado: 5000,
+  }
+  const users = (prisma: ReturnType<typeof makeDeps>['prisma'], devices = [sub('o-device')]) =>
+    prisma.user.findUnique.mockImplementation(async (args?: object) => {
+      const id = (args as { where: { id: string } }).where.id
+      return id === 'o1'
+        ? { id: 'o1', nombre: 'Don Pepe', subscriptions: devices }
+        : id === 'u1'
+          ? { id: 'u1', nombre: 'Ana', subscriptions: [] }
+          : null
+    })
+
+  it('tells the owner who paid, for which court and hour, and how much they have to give back', async () => {
+    const { prisma, service } = makeDeps()
+    users(prisma)
+
+    await service.notifyOwnerSpaceTaken(data)
+
+    const created = prisma.notificacion.createMany.mock.calls[0][0] as {
+      data: Array<{ userId: string; titulo: string; cuerpo: string; url: string }>
+    }
+    expect(created.data).toHaveLength(1)
+    expect(created.data[0]).toMatchObject({
+      userId: 'o1',
+      titulo: 'Reserva cerrada: espacio ocupado',
+      url: '/dueno/reservas',
+    })
+    expect(created.data[0].cuerpo).toContain('Ana')
+    expect(created.data[0].cuerpo).toContain('El Mate')
+    expect(created.data[0].cuerpo).toContain('17:00')
+    expect(created.data[0].cuerpo).toContain('5.000')
+    expect(created.data[0].cuerpo).toContain('devolverle')
+  })
+
+  it('opens the owner reservations, where the closed booking is listed, from the push', async () => {
+    const { prisma, push, service } = makeDeps()
+    users(prisma, [sub('o1'), sub('o2')])
+
+    await service.notifyOwnerSpaceTaken(data)
+
+    expect(push.send).toHaveBeenCalledTimes(2)
+    expect(push.send).toHaveBeenCalledWith(
+      expect.objectContaining({ endpoint: 'o1' }),
+      expect.objectContaining({ title: 'Reserva cerrada: espacio ocupado', url: '/dueno/reservas' })
+    )
+  })
+
+  it('does not notify the player here: only the owner', async () => {
+    const { prisma, push, service } = makeDeps()
+    users(prisma)
+
+    await service.notifyOwnerSpaceTaken(data)
+
+    const created = prisma.notificacion.createMany.mock.calls[0][0] as {
+      data: Array<{ userId: string }>
+    }
+    expect(created.data.map((n) => n.userId)).toEqual(['o1'])
+    expect(push.send).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    ['the owner', 'o1'],
+    ['the player', 'u1'],
+  ])('does nothing when %s no longer exists', async (_who, missing) => {
+    const { prisma, push, service } = makeDeps()
+    prisma.user.findUnique.mockImplementation(async (args?: object) => {
+      const id = (args as { where: { id: string } }).where.id
+      return id === missing ? null : { id, nombre: 'X', subscriptions: [] }
+    })
+
+    await service.notifyOwnerSpaceTaken(data)
+
+    expect(prisma.notificacion.createMany).not.toHaveBeenCalled()
+    expect(push.send).not.toHaveBeenCalled()
+  })
+})

@@ -90,6 +90,7 @@ const makeGateway = () => ({
 const makeNotifications = () => ({
   notifyBookingConfirmed: vi.fn(async (_reservaId?: string) => undefined),
   notifyBookingSpaceTaken: vi.fn(async (_data?: object) => undefined),
+  notifyOwnerSpaceTaken: vi.fn(async (_data?: object) => undefined),
 })
 
 const build = (
@@ -494,6 +495,51 @@ describe('PagosService: courts that share the physical space', () => {
           montoPagado: 5000,
         })
         expect(notifications.notifyBookingConfirmed).not.toHaveBeenCalled()
+      })
+
+      it('tells the owner too: who paid, how much, and that the refund is theirs to make', async () => {
+        const { prisma, notifications, service } = build()
+        shared(prisma, taken)
+
+        await service.handlePaymentNotification('123456')
+
+        expect(notifications.notifyOwnerSpaceTaken).toHaveBeenCalledWith({
+          ownerId: 'o1',
+          jugadorId: 'u1',
+          canchaNombre: 'El Mate',
+          turnoInicio: new Date('2026-11-15T20:00:00.000Z'),
+          montoPagado: 5000,
+        })
+      })
+
+      it('does not tell the owner anything when the payment is confirmed normally', async () => {
+        const { prisma, notifications, service } = build()
+        shared(prisma, [])
+
+        await service.handlePaymentNotification('123456')
+
+        expect(notifications.notifyOwnerSpaceTaken).not.toHaveBeenCalled()
+        expect(notifications.notifyBookingSpaceTaken).not.toHaveBeenCalled()
+      })
+
+      it('the notice to the owner still goes out when the one to the player fails', async () => {
+        const { prisma, notifications, service } = build()
+        shared(prisma, taken)
+        notifications.notifyBookingSpaceTaken.mockRejectedValue(new Error('push down'))
+
+        await expect(service.handlePaymentNotification('123456')).resolves.toBe('conflict')
+
+        expect(notifications.notifyOwnerSpaceTaken).toHaveBeenCalled()
+      })
+
+      it('the notice to the player still goes out when the one to the owner fails', async () => {
+        const { prisma, notifications, service } = build()
+        shared(prisma, taken)
+        notifications.notifyOwnerSpaceTaken.mockRejectedValue(new Error('push down'))
+
+        await expect(service.handlePaymentNotification('123456')).resolves.toBe('conflict')
+
+        expect(notifications.notifyBookingSpaceTaken).toHaveBeenCalled()
       })
 
       it('still answers the webhook when the notice to the player fails', async () => {

@@ -208,12 +208,13 @@ export class PagosService {
       this.logger.warn(
         `Payment ${payment.id} was approved but the space of booking ${reserva.id} was confirmed for a court that shares it first: closed, refund pending`
       )
-      await this.notifySpaceTaken(
-        reserva.userId,
-        turno.cancha.nombre,
-        turno.fechaHoraInicio,
-        payment.transactionAmount
-      )
+      await this.notifySpaceTaken({
+        ownerId: turno.cancha.ownerId,
+        jugadorId: reserva.userId,
+        canchaNombre: turno.cancha.nombre,
+        turnoInicio: turno.fechaHoraInicio,
+        montoPagado: payment.transactionAmount,
+      })
       return 'conflict'
     }
     await this.notifyOwner(reserva.id)
@@ -221,21 +222,34 @@ export class PagosService {
   }
 
   // Same rule as the owner's notice: it already happened, a failed notice must not fail the webhook.
-  private async notifySpaceTaken(
-    jugadorId: string,
-    canchaNombre: string,
-    turnoInicio: Date,
+  private async notifySpaceTaken(data: {
+    ownerId: string
+    jugadorId: string
+    canchaNombre: string
+    turnoInicio: Date
     montoPagado: number
-  ): Promise<void> {
+  }): Promise<void> {
+    // The player and the owner are told separately: one notice failing must not hide the other.
     try {
       await this.notifications.notifyBookingSpaceTaken({
-        jugadorId,
-        canchaNombre,
-        turnoInicio,
-        montoPagado,
+        jugadorId: data.jugadorId,
+        canchaNombre: data.canchaNombre,
+        turnoInicio: data.turnoInicio,
+        montoPagado: data.montoPagado,
       })
     } catch (error) {
-      this.logger.error(`Could not tell the player about the closed booking of ${jugadorId}`, error)
+      this.logger.error(
+        `Could not tell the player about the closed booking of ${data.jugadorId}`,
+        error
+      )
+    }
+    try {
+      await this.notifications.notifyOwnerSpaceTaken(data)
+    } catch (error) {
+      this.logger.error(
+        `Could not tell the owner about the closed booking of ${data.jugadorId}`,
+        error
+      )
     }
   }
 

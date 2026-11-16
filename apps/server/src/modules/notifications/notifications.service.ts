@@ -283,6 +283,35 @@ export class NotificationsService {
     await this.sendPush(jugador.subscriptions, titulo, cuerpo, PLAYER_RESERVAS_URL)
   }
 
+  /**
+   * Tells the owner that a booking was closed because the space had just been confirmed for a
+   * court that shares it, and that they have a refund to make (the payment was already approved).
+   */
+  async notifyOwnerSpaceTaken(data: {
+    ownerId: string
+    jugadorId: string
+    canchaNombre: string
+    turnoInicio: Date
+    montoPagado: number
+  }): Promise<void> {
+    const [owner, jugador] = await Promise.all([
+      this.prisma.user.findUnique({
+        where: { id: data.ownerId },
+        include: { subscriptions: true },
+      }),
+      this.prisma.user.findUnique({ where: { id: data.jugadorId } }),
+    ])
+    if (!owner || !jugador) return
+
+    const titulo = 'Reserva cerrada: espacio ocupado'
+    const cuerpo = `${jugador.nombre} pagó ${formatPesos(data.montoPagado)} por ${data.canchaNombre} el ${formatSlotLabel(data.turnoInicio)}, pero otra cancha que comparte el espacio se confirmó antes. Tenés que devolverle ese monto: quedó anotado en "Vencidas y canceladas".`
+
+    await this.prisma.notificacion.createMany({
+      data: [{ userId: owner.id, titulo, cuerpo, url: OWNER_RESERVAS_URL }],
+    })
+    await this.sendPush(owner.subscriptions, titulo, cuerpo, OWNER_RESERVAS_URL)
+  }
+
   private async findAudience(convocatoria: {
     alcance: Alcance
     creadorId: string
