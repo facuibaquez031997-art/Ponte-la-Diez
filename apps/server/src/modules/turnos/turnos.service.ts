@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common'
 import type { ReservaState, Turno, TurnoState } from '@prisma/client'
 import { PrismaService } from '../../common/prisma/prisma.service.js'
 import { HOLD_MS, releaseExpiredHolds } from '../reservas/holds.js'
-import { findBlocked, hourKey } from './conflicts.js'
+import { findBlocked } from './conflicts.js'
 import {
   SLOT_MS,
   WINDOW_DAYS,
@@ -160,7 +160,7 @@ export class TurnosService {
             },
           })
 
-    // A free slot is blocked while an entry that shares its physical space is reserved then.
+    // A free slot is blocked while a court that shares its physical space is confirmed then.
     const blocked = await findBlocked(
       this.prisma,
       canchas.map((cancha) => cancha.id),
@@ -183,7 +183,8 @@ export class TurnosService {
             estado: turno.estado,
             bloqueadaPor:
               turno.estado === 'FREE'
-                ? (nameOf.get(blocked.get(hourKey(cancha.id, turno.fechaHoraInicio)) ?? '') ?? null)
+                ? (nameOf.get(blocked.of(cancha.id, turno.fechaHoraInicio, turno.numero) ?? '') ??
+                  null)
                 : null,
             reserva: turno.reserva ? this.toAgendaReserva(turno.reserva) : null,
           })),
@@ -233,10 +234,10 @@ export class TurnosService {
       select: { id: true, fechaHoraInicio: true, fechaHoraFin: true, numero: true },
     })
 
-    // A slot is not free to book while an entry that shares its physical space is reserved then.
+    // A slot is not free to book while a court that shares its physical space is confirmed then.
     const blocked = await findBlocked(this.prisma, [canchaId], range)
     return blocked.size === 0
       ? free
-      : free.filter((turno) => !blocked.has(hourKey(canchaId, turno.fechaHoraInicio)))
+      : free.filter((turno) => !blocked.of(canchaId, turno.fechaHoraInicio, turno.numero))
   }
 }

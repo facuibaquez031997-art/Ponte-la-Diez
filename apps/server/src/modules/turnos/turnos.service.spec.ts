@@ -18,7 +18,10 @@ const makePrisma = () => ({
   reserva: { findMany: vi.fn(async (_args?: object) => [] as unknown[]) },
   // Entries that share the physical space with the one asked about: none unless a test adds them.
   canchaConflicto: {
-    findMany: vi.fn(async (_args?: object) => [] as { canchaId: string; otraCanchaId: string }[]),
+    findMany: vi.fn(
+      async (_args?: object) =>
+        [] as Array<{ canchaId: string; numero: number; otraCanchaId: string; otraNumero: number }>
+    ),
   },
   turno: {
     findMany: vi.fn(async (_args?: object) => [] as unknown[]),
@@ -303,7 +306,9 @@ describe('TurnosService.listFree with entries that share the physical space', ()
   // Court of 11 (c-11) linked with this entry (c1, courts of 5): the two directions are stored.
   const withLinks = (reservedOfTheOther: { canchaId: string; fechaHoraInicio: Date }[]) => {
     const prisma = makePrisma()
-    prisma.canchaConflicto.findMany.mockResolvedValue([{ canchaId: 'c1', otraCanchaId: 'c-11' }])
+    prisma.canchaConflicto.findMany.mockResolvedValue([
+      { canchaId: 'c1', numero: 0, otraCanchaId: 'c-11', otraNumero: 0 },
+    ])
     prisma.turno.findMany.mockImplementation(async (args?: object) => {
       const { estado } = (args as { where: { estado?: string } }).where
       if (estado === 'RESERVED') return reservedOfTheOther
@@ -327,6 +332,21 @@ describe('TurnosService.listFree with entries that share the physical space', ()
     const list = await new TurnosService(prisma as never).listFree('c1', '2026-11-09', now)
 
     expect(list.map((t) => t.id)).toEqual(['b1'])
+  })
+
+  it('only hides the court of the entry that is linked, not the other courts of its entry', async () => {
+    // This entry (c1) has two courts and only its court 2 shares the space with the 11.
+    const prisma = withLinks([
+      { canchaId: 'c-11', fechaHoraInicio: start('2026-11-09T20:00:00.000Z') },
+    ])
+    prisma.canchaConflicto.findMany.mockResolvedValue([
+      { canchaId: 'c1', numero: 2, otraCanchaId: 'c-11', otraNumero: 0 },
+    ])
+
+    const list = await new TurnosService(prisma as never).listFree('c1', '2026-11-09', now)
+
+    // At 20:00 the court 2 (a2) is blocked and the court 1 (a1) is still free.
+    expect(list.map((t) => t.id)).toEqual(['a1', 'b1'])
   })
 
   it('shows everything when the linked entry has nothing reserved', async () => {

@@ -18,6 +18,7 @@ const cancha = {
 const turno = (overrides: object = {}) => ({
   id: 't1',
   canchaId: 'c1',
+  numero: 1,
   estado: 'FREE',
   fechaHoraInicio: future,
   fechaHoraFin: new Date(future.getTime() + 3_600_000),
@@ -70,7 +71,15 @@ const makePrisma = () => {
     $executeRaw: vi.fn(async (..._args: unknown[]) => 0),
     // Entries that share the physical space with the one booked: none unless a test adds them.
     canchaConflicto: {
-      findMany: vi.fn(async (_args?: object) => [] as { canchaId: string; otraCanchaId: string }[]),
+      findMany: vi.fn(
+        async (_args?: object) =>
+          [] as Array<{
+            canchaId: string
+            numero: number
+            otraCanchaId: string
+            otraNumero: number
+          }>
+      ),
     },
     $transaction: vi.fn(async (arg: unknown) =>
       typeof arg === 'function'
@@ -174,7 +183,7 @@ describe('ReservasService.create', () => {
           id: { not: 't1' },
         },
         orderBy: { numero: 'asc' },
-        select: { id: true },
+        select: { id: true, numero: true },
       })
       expect(prisma.turno.updateMany).toHaveBeenLastCalledWith({
         where: { id: 't2', estado: 'FREE' },
@@ -227,13 +236,22 @@ describe('ReservasService.create', () => {
         { turnoId: 't1', tipoPago: 'SENA' },
         now
       )
-    // The booked entry c1 shares the space with c-other.
-    const linkedTo = (prisma: ReturnType<typeof makePrisma>, reserved: object[]) => {
+    // The booked entry c1 shares the space with c-other: its court `numero` (0 = all of them)
+    // with every court of the other one. `confirmed` are the courts of c-other already paid at
+    // that hour; `siblings` the other free courts of c1 at that hour.
+    const linkedTo = (
+      prisma: ReturnType<typeof makePrisma>,
+      confirmed: object[],
+      {
+        numero = 0,
+        siblings = [],
+      }: { numero?: number; siblings?: { id: string; numero: number }[] } = {}
+    ) => {
       prisma.canchaConflicto.findMany.mockResolvedValue([
-        { canchaId: 'c1', otraCanchaId: 'c-other' },
+        { canchaId: 'c1', numero, otraCanchaId: 'c-other', otraNumero: 0 },
       ])
       prisma.turno.findMany.mockImplementation(async (args?: object) =>
-        (args as { where: { estado: string } }).where.estado === 'RESERVED' ? reserved : []
+        (args as { where: { estado: string } }).where.estado === 'RESERVED' ? confirmed : siblings
       )
     }
 
@@ -256,12 +274,60 @@ describe('ReservasService.create', () => {
 
     it('refuses the booking (409) when a linked entry is reserved at that hour, and claims nothing', async () => {
       const prisma = makePrisma()
-      linkedTo(prisma, [{ canchaId: 'c-other', fechaHoraInicio: future }])
+      linkedTo(prisma, [{ canchaId: 'c-other', numero: 1, fechaHoraInicio: future }])
 
-      await expect(book(prisma)).rejects.toBeInstanceOf(ConflictException)
+      await expect(book(prisma)).rejects.toThrow('comparte el espacio')
 
       expect(prisma.turno.updateMany).not.toHaveBeenCalled()
       expect(prisma.reserva.create).not.toHaveBeenCalled()
+    })
+
+    it('gives another court of the same entry when the chosen one is the blocked one', async () => {
+      // c1 has two courts; only its court 1 shares the space. The linked court is paid.
+      const prisma = makePrisma()
+      linkedTo(prisma, [{ canchaId: 'c-other', numero: 1, fechaHoraInicio: future }], {
+        numero: 1,
+        siblings: [{ id: 't2', numero: 2 }],
+      })
+
+      await book(prisma)
+
+      expect(createArgs(prisma).turnoId).toBe('t2')
+      // The blocked court was not even tried.
+      expect(prisma.turno.updateMany).toHaveBeenCalledTimes(1)
+      expect(prisma.turno.updateMany).toHaveBeenCalledWith({
+        where: { id: 't2', estado: 'FREE' },
+        data: { estado: 'RESERVED' },
+      })
+    })
+
+    it('books the chosen court when the one that is blocked is another court of the entry', async () => {
+      // Only the court 2 of c1 shares the space; the player asked for the court 1.
+      const prisma = makePrisma()
+      linkedTo(prisma, [{ canchaId: 'c-other', numero: 1, fechaHoraInicio: future }], { numero: 2 })
+
+      await book(prisma)
+
+      expect(createArgs(prisma).turnoId).toBe('t1')
+    })
+
+    it('refuses when every free court of the hour is blocked, and says why', async () => {
+      const prisma = makePrisma()
+      linkedTo(prisma, [{ canchaId: 'c-other', numero: 1, fechaHoraInicio: future }], {
+        numero: 0,
+        siblings: [{ id: 't2', numero: 2 }],
+      })
+
+      await expect(book(prisma)).rejects.toThrow('comparte el espacio')
+
+      expect(prisma.turno.updateMany).not.toHaveBeenCalled()
+    })
+
+    it('says the slot was taken (not that the space is) when nothing is blocked', async () => {
+      const prisma = makePrisma()
+      prisma.turno.updateMany.mockResolvedValue({ count: 0 })
+
+      await expect(book(prisma)).rejects.toThrow('El turno ya fue reservado')
     })
 
     it('asks for the reservations of the linked entries exactly at the hour of the slot', async () => {
@@ -274,9 +340,11 @@ describe('ReservasService.create', () => {
         where: {
           canchaId: { in: ['c-other'] },
           estado: 'RESERVED',
+          // Only a confirmed booking blocks: one waiting for its payment holds just its own slot.
+          reserva: { is: { estado: 'CONFIRMED' } },
           fechaHoraInicio: { gte: future, lte: future },
         },
-        select: { canchaId: true, fechaHoraInicio: true },
+        select: { canchaId: true, numero: true, fechaHoraInicio: true },
       })
     })
 

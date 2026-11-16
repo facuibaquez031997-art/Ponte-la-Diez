@@ -62,22 +62,41 @@ describe('size of the court (players per side)', () => {
       expect(update({ nombre: 'Otro nombre' })).toHaveLength(0)
     })
 
-    it('accepts a list of ids, or an empty list to remove the links', () => {
-      expect(create({ ...valid, jugadores: 5, comparteCon: [id, other] })).toHaveLength(0)
-      expect(update({ comparteCon: [id] })).toHaveLength(0)
+    it('accepts a list of links, or an empty list to remove them', () => {
+      const links = [{ canchaId: id }, { canchaId: other, numero: 1, otraNumero: 0 }]
+      expect(create({ ...valid, jugadores: 5, comparteCon: links })).toHaveLength(0)
+      expect(update({ comparteCon: [{ canchaId: id, numero: 2 }] })).toHaveLength(0)
       expect(update({ comparteCon: [] })).toHaveLength(0)
     })
 
-    it.each([['nope'], [[id, 'nope']], [[1]], [null], ['8f0c1f7e-3b9e-4c55-9d4b-0d6a5a3a9f11']])(
-      'refuses %j',
-      (comparteCon) => {
-        expect(create({ ...valid, jugadores: 5, comparteCon })).not.toHaveLength(0)
-        expect(update({ comparteCon })).not.toHaveLength(0)
-      }
-    )
+    it('accepts the courts of each entry from 0 (all of them) to 10', () => {
+      expect(update({ comparteCon: [{ canchaId: id, numero: 0, otraNumero: 10 }] })).toHaveLength(0)
+      expect(update({ comparteCon: [{ canchaId: id, numero: 11 }] })).not.toHaveLength(0)
+      expect(update({ comparteCon: [{ canchaId: id, otraNumero: 11 }] })).not.toHaveLength(0)
+    })
+
+    it.each([[-1], [2.5], ['1'], [null]])('refuses a court number of %s', (numero) => {
+      expect(update({ comparteCon: [{ canchaId: id, numero }] })).not.toHaveLength(0)
+      expect(update({ comparteCon: [{ canchaId: id, otraNumero: numero }] })).not.toHaveLength(0)
+    })
+
+    it.each([
+      ['nope'],
+      [[{ canchaId: 'nope' }]],
+      [[{}]],
+      [[id]],
+      [[1]],
+      [null],
+      [{ canchaId: id }],
+    ])('refuses %j', (comparteCon) => {
+      expect(create({ ...valid, jugadores: 5, comparteCon })).not.toHaveLength(0)
+      expect(update({ comparteCon })).not.toHaveLength(0)
+    })
 
     it('refuses an absurd number of links', () => {
-      expect(update({ comparteCon: Array.from({ length: 21 }, () => id) })).not.toHaveLength(0)
+      expect(
+        update({ comparteCon: Array.from({ length: 51 }, () => ({ canchaId: id })) })
+      ).not.toHaveLength(0)
     })
   })
 

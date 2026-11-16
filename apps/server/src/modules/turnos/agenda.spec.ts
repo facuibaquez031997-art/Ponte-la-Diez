@@ -42,7 +42,10 @@ const makePrisma = () => ({
   reserva: { findMany: vi.fn(async (_args?: object) => [] as unknown[]) },
   // Entries that share the physical space with the one asked about: none unless a test adds them.
   canchaConflicto: {
-    findMany: vi.fn(async (_args?: object) => [] as { canchaId: string; otraCanchaId: string }[]),
+    findMany: vi.fn(
+      async (_args?: object) =>
+        [] as Array<{ canchaId: string; numero: number; otraCanchaId: string; otraNumero: number }>
+    ),
   },
   turno: { findMany: vi.fn(async (_args?: object) => [] as unknown[]) },
 })
@@ -289,13 +292,15 @@ describe('TurnosService.agenda with entries that share the physical space', () =
     const { prisma, service } = makeService()
     // c1 (El Mate) and c2 (La Bombonera) share the space, in both directions.
     prisma.canchaConflicto.findMany.mockResolvedValue([
-      { canchaId: 'c1', otraCanchaId: 'c2' },
-      { canchaId: 'c2', otraCanchaId: 'c1' },
+      { canchaId: 'c1', numero: 0, otraCanchaId: 'c2', otraNumero: 0 },
+      { canchaId: 'c2', numero: 0, otraCanchaId: 'c1', otraNumero: 0 },
     ])
     prisma.turno.findMany.mockImplementation(async (args?: object) => {
       const { estado } = (args as { where: { estado?: string } }).where
       if (estado === 'RESERVED') {
-        return [{ canchaId: 'c2', fechaHoraInicio: new Date('2026-11-10T21:00:00.000Z') }]
+        return [
+          { canchaId: 'c2', numero: 1, fechaHoraInicio: new Date('2026-11-10T21:00:00.000Z') },
+        ]
       }
       return [
         turno('a', 'c1', '2026-11-10T21:00:00.000Z'),

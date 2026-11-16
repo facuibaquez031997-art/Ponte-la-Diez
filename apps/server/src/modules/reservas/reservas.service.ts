@@ -18,7 +18,7 @@ import type {
 import { PrismaService } from '../../common/prisma/prisma.service.js'
 import { NotificationsService } from '../notifications/notifications.service.js'
 import type { CreateReservaDto } from './dto/create-reserva.dto.js'
-import { findBlocked } from '../turnos/conflicts.js'
+import { type Blocked, findBlocked } from '../turnos/conflicts.js'
 import { HOLD_MS, releaseExpiredHolds } from './holds.js'
 
 type StoredReserva = Pick<Reserva, 'id' | 'estado' | 'montoTotal'> & {
@@ -183,21 +183,24 @@ export class ReservasService {
 
     const reserva = await this.prisma.$transaction(async (tx) => {
       // Entries that share the physical space are checked together. One lock per owner and hour
-      // makes two bookings of linked entries wait for each other, so the second one sees the
-      // first one's reservation and is refused instead of both going through.
+      // makes two bookings of linked entries wait for each other, so the second one sees what the
+      // first one confirmed instead of both going through. Only a confirmed (paid) booking blocks
+      // the linked courts; one that still waits for its payment holds just its own slot.
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${turno.cancha.ownerId}), hashtext(${turno.fechaHoraInicio.toISOString()}))`
       const blocked = await findBlocked(tx, [turno.canchaId], {
         gte: turno.fechaHoraInicio,
         lte: turno.fechaHoraInicio,
       })
-      if (blocked.size > 0) {
+
+      const claim = await this.claimSlot(tx, turno, blocked)
+      if (!claim.turnoId) {
         throw new ConflictException(
-          'Ese horario no está disponible: otra cancha que comparte el espacio ya está reservada'
+          claim.blockedFree
+            ? 'Ese horario no está disponible: otra cancha que comparte el espacio ya está confirmada'
+            : 'El turno ya fue reservado'
         )
       }
-
-      const turnoId = await this.claimSlot(tx, turno)
-      if (!turnoId) throw new ConflictException('El turno ya fue reservado')
+      const turnoId = claim.turnoId
 
       return tx.reserva.create({
         data: {
@@ -220,8 +223,16 @@ export class ReservasService {
    */
   private async claimSlot(
     tx: Prisma.TransactionClient,
-    turno: Pick<Turno, 'id' | 'canchaId' | 'fechaHoraInicio'>
-  ): Promise<string | null> {
+    turno: Pick<Turno, 'id' | 'canchaId' | 'fechaHoraInicio' | 'numero' | 'estado'>,
+    blocked: Blocked
+  ): Promise<{ turnoId: string | null; blockedFree: boolean }> {
+    // A free court that was left out only because a linked court holds its space.
+    let blockedFree = false
+    const usable = (numero: number, free: boolean): boolean => {
+      if (!blocked.of(turno.canchaId, turno.fechaHoraInicio, numero)) return true
+      if (free) blockedFree = true
+      return false
+    }
     const take = async (id: string): Promise<boolean> => {
       const claimed = await tx.turno.updateMany({
         where: { id, estado: 'FREE' },
@@ -230,7 +241,9 @@ export class ReservasService {
       return claimed.count === 1
     }
 
-    if (await take(turno.id)) return turno.id
+    if (usable(turno.numero, turno.estado === 'FREE') && (await take(turno.id))) {
+      return { turnoId: turno.id, blockedFree }
+    }
 
     const others = await tx.turno.findMany({
       where: {
@@ -240,12 +253,14 @@ export class ReservasService {
         id: { not: turno.id },
       },
       orderBy: { numero: 'asc' },
-      select: { id: true },
+      select: { id: true, numero: true },
     })
     for (const other of others) {
-      if (await take(other.id)) return other.id
+      if (usable(other.numero, true) && (await take(other.id))) {
+        return { turnoId: other.id, blockedFree }
+      }
     }
-    return null
+    return { turnoId: null, blockedFree }
   }
 
   async listMine(userId: string, now: Date = new Date()): Promise<ReservaView[]> {

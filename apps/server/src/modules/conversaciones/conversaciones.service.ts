@@ -370,6 +370,7 @@ export class ConversacionesService {
       where: { id: turnoId },
       select: {
         canchaId: true,
+        numero: true,
         estado: true,
         fechaHoraInicio: true,
         cancha: { select: { ownerId: true } },
@@ -385,12 +386,14 @@ export class ConversacionesService {
     ) {
       throw new BadRequestException('Ese horario ya no está disponible')
     }
-    // Nor can it be offered while an entry that shares its physical space is reserved then.
+    // Nor can it be offered while a court that shares its physical space is confirmed then.
     const blocked = await findBlocked(this.prisma, [turno.canchaId], {
       gte: turno.fechaHoraInicio,
       lte: turno.fechaHoraInicio,
     })
-    if (blocked.size > 0) throw new BadRequestException('Ese horario ya no está disponible')
+    if (blocked.of(turno.canchaId, turno.fechaHoraInicio, turno.numero)) {
+      throw new BadRequestException('Ese horario ya no está disponible')
+    }
     return {
       ofertaTurnoId: turnoId,
       ofertaInicio: turno.fechaHoraInicio,
@@ -446,18 +449,21 @@ export class ConversacionesService {
             fechaHoraInicio: row.ofertaInicio,
           })),
         },
-        select: { canchaId: true, fechaHoraInicio: true },
+        select: { canchaId: true, numero: true, fechaHoraInicio: true },
       })
-      free = new Set(turnos.map((turno) => hourKey(turno.canchaId, turno.fechaHoraInicio)))
 
-      // An hour is not bookable while an entry that shares the physical space is reserved then.
+      // A court is not bookable while a court that shares its physical space is confirmed then.
       const starts = upcoming.map((row) => row.ofertaInicio.getTime())
       const blocked = await findBlocked(
         this.prisma,
         [...new Set(upcoming.map((row) => row.ofertaCanchaId ?? cancha.id))],
         { gte: new Date(Math.min(...starts)), lte: new Date(Math.max(...starts)) }
       )
-      for (const key of blocked.keys()) free.delete(key)
+      free = new Set(
+        turnos
+          .filter((turno) => !blocked.of(turno.canchaId, turno.fechaHoraInicio, turno.numero))
+          .map((turno) => hourKey(turno.canchaId, turno.fechaHoraInicio))
+      )
     }
 
     return rows.map((row) => {

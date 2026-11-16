@@ -139,48 +139,149 @@ describe('CanchasService', () => {
     expect(publicCall.include).toEqual(FOTOS_INCLUDE)
   })
 
-  describe('entries that share the physical space', () => {
+  describe('courts that share the physical space', () => {
     const OTHER_A = '8f0c1f7e-3b9e-4c55-9d4b-0d6a5a3a9f11'
     const OTHER_B = '3a1f6d52-7c41-4a7e-8b0e-5d2c1e9f4a22'
 
-    it('shows each of my courts with the ids of the entries it shares the space with', async () => {
+    // This entry (c1) has 2 courts; the others have 3 and 1.
+    const asOwner = (prisma: ReturnType<typeof makePrisma>, cantidad = 2) => {
+      prisma.cancha.findUnique.mockResolvedValue({ id: 'c1', ownerId: 'owner1', cantidad })
+      // Like the database: only the courts of the owner that were asked for.
+      const mine = [
+        { id: OTHER_A, cantidad: 3 },
+        { id: OTHER_B, cantidad: 1 },
+      ]
+      prisma.cancha.findMany.mockImplementation(async (args?: object) => {
+        const ids = (args as { where: { id: { in: string[] } } }).where.id.in
+        return mine.filter((court) => ids.includes(court.id))
+      })
+    }
+
+    it('shows each of my courts with the courts it shares the space with', async () => {
       const { service, prisma } = makeService()
       prisma.cancha.findMany.mockResolvedValue([
-        { id: 'c1', comparteCon: [{ otraCanchaId: OTHER_A }, { otraCanchaId: OTHER_B }] },
+        {
+          id: 'c1',
+          comparteCon: [
+            { otraCanchaId: OTHER_A, numero: 1, otraNumero: 0 },
+            { otraCanchaId: OTHER_B, numero: 0, otraNumero: 0 },
+          ],
+        },
         { id: 'c2', comparteCon: [] },
       ])
 
       const mine = await service.listMine('owner1')
 
       expect(mine.map((c) => [c.id, c.comparteCon])).toEqual([
-        ['c1', [OTHER_A, OTHER_B]],
+        [
+          'c1',
+          [
+            { canchaId: OTHER_A, numero: 1, otraNumero: 0 },
+            { canchaId: OTHER_B, numero: 0, otraNumero: 0 },
+          ],
+        ],
         ['c2', []],
       ])
     })
 
-    it('links both ways, so booking either one blocks the other', async () => {
+    it('links court 1 of this entry with all the courts of the other one, in both directions', async () => {
       const { service, prisma } = makeService()
-      prisma.cancha.findUnique.mockResolvedValue({ id: 'c1', ownerId: 'owner1' })
-      prisma.cancha.count.mockResolvedValue(2)
+      asOwner(prisma)
 
-      await service.update('owner1', 'c1', { comparteCon: [OTHER_A, OTHER_B] })
+      await service.update('owner1', 'c1', {
+        comparteCon: [{ canchaId: OTHER_A, numero: 1, otraNumero: 0 }],
+      })
 
       expect(prisma.canchaConflicto.deleteMany).toHaveBeenCalledWith({
         where: { OR: [{ canchaId: 'c1' }, { otraCanchaId: 'c1' }] },
       })
       expect(prisma.canchaConflicto.createMany).toHaveBeenCalledWith({
         data: [
-          { canchaId: 'c1', otraCanchaId: OTHER_A },
-          { canchaId: OTHER_A, otraCanchaId: 'c1' },
-          { canchaId: 'c1', otraCanchaId: OTHER_B },
-          { canchaId: OTHER_B, otraCanchaId: 'c1' },
+          { canchaId: 'c1', numero: 1, otraCanchaId: OTHER_A, otraNumero: 0 },
+          { canchaId: OTHER_A, numero: 0, otraCanchaId: 'c1', otraNumero: 1 },
         ],
       })
     })
 
+    it('a link without numbers means every court with every court', async () => {
+      const { service, prisma } = makeService()
+      asOwner(prisma)
+
+      await service.update('owner1', 'c1', { comparteCon: [{ canchaId: OTHER_B }] })
+
+      expect(prisma.canchaConflicto.createMany).toHaveBeenCalledWith({
+        data: [
+          { canchaId: 'c1', numero: 0, otraCanchaId: OTHER_B, otraNumero: 0 },
+          { canchaId: OTHER_B, numero: 0, otraCanchaId: 'c1', otraNumero: 0 },
+        ],
+      })
+    })
+
+    it('can link the same entry once per court of mine (two divisible courts, two entries)', async () => {
+      const { service, prisma } = makeService()
+      asOwner(prisma)
+
+      await service.update('owner1', 'c1', {
+        comparteCon: [
+          { canchaId: OTHER_A, numero: 1 },
+          { canchaId: OTHER_B, numero: 2 },
+        ],
+      })
+
+      const data = (prisma.canchaConflicto.createMany.mock.calls[0][0] as { data: object[] }).data
+      expect(data).toHaveLength(4)
+    })
+
+    it('ignores the same link sent twice', async () => {
+      const { service, prisma } = makeService()
+      asOwner(prisma)
+
+      await service.update('owner1', 'c1', {
+        comparteCon: [
+          { canchaId: OTHER_A, numero: 1 },
+          { canchaId: OTHER_A, numero: 1 },
+        ],
+      })
+
+      const data = (prisma.canchaConflicto.createMany.mock.calls[0][0] as { data: object[] }).data
+      expect(data).toHaveLength(2)
+    })
+
+    it('refuses a court of mine that does not exist: this entry has 2 courts, not 3', async () => {
+      const { service, prisma } = makeService()
+      asOwner(prisma)
+
+      await expect(
+        service.update('owner1', 'c1', { comparteCon: [{ canchaId: OTHER_A, numero: 3 }] })
+      ).rejects.toThrow('no hay una cancha número 3')
+      expect(prisma.canchaConflicto.createMany).not.toHaveBeenCalled()
+    })
+
+    it('refuses a court of the other entry that does not exist: it has 1, not 2', async () => {
+      const { service, prisma } = makeService()
+      asOwner(prisma)
+
+      await expect(
+        service.update('owner1', 'c1', { comparteCon: [{ canchaId: OTHER_B, otraNumero: 2 }] })
+      ).rejects.toBeInstanceOf(BadRequestException)
+      expect(prisma.canchaConflicto.createMany).not.toHaveBeenCalled()
+    })
+
+    it('validates the numbers against the quantity that is being saved in the same request', async () => {
+      const { service, prisma } = makeService()
+      asOwner(prisma, 3)
+
+      await service.update('owner1', 'c1', {
+        cantidad: 3,
+        comparteCon: [{ canchaId: OTHER_A, numero: 3 }],
+      })
+
+      expect(prisma.canchaConflicto.createMany).toHaveBeenCalled()
+    })
+
     it('an empty list removes the links in both directions', async () => {
       const { service, prisma } = makeService()
-      prisma.cancha.findUnique.mockResolvedValue({ id: 'c1', ownerId: 'owner1' })
+      asOwner(prisma)
 
       await service.update('owner1', 'c1', { comparteCon: [] })
 
@@ -190,7 +291,7 @@ describe('CanchasService', () => {
 
     it('leaves the links alone when the request does not mention them', async () => {
       const { service, prisma } = makeService()
-      prisma.cancha.findUnique.mockResolvedValue({ id: 'c1', ownerId: 'owner1' })
+      asOwner(prisma)
 
       await service.update('owner1', 'c1', { nombre: 'Otro nombre' })
 
@@ -202,37 +303,59 @@ describe('CanchasService', () => {
       })
     })
 
+    it('with fewer courts, drops the links that pointed to the courts that no longer exist', async () => {
+      const { service, prisma } = makeService()
+      asOwner(prisma, 1)
+
+      await service.update('owner1', 'c1', { cantidad: 1 })
+
+      expect(prisma.canchaConflicto.deleteMany).toHaveBeenCalledWith({
+        where: {
+          OR: [
+            { canchaId: 'c1', numero: { gt: 1 } },
+            { otraCanchaId: 'c1', otraNumero: { gt: 1 } },
+          ],
+        },
+      })
+      expect(prisma.canchaConflicto.createMany).not.toHaveBeenCalled()
+    })
+
     it('only lets me link courts of mine', async () => {
       const { service, prisma } = makeService()
-      prisma.cancha.findUnique.mockResolvedValue({ id: 'c1', ownerId: 'owner1' })
-      prisma.cancha.count.mockResolvedValue(1) // one of the two is somebody else's
+      prisma.cancha.findUnique.mockResolvedValue({ id: 'c1', ownerId: 'owner1', cantidad: 1 })
+      prisma.cancha.findMany.mockResolvedValue([{ id: OTHER_A, cantidad: 1 }]) // B is somebody else's
 
       await expect(
-        service.update('owner1', 'c1', { comparteCon: [OTHER_A, OTHER_B] })
+        service.update('owner1', 'c1', {
+          comparteCon: [{ canchaId: OTHER_A }, { canchaId: OTHER_B }],
+        })
       ).rejects.toBeInstanceOf(BadRequestException)
       expect(prisma.canchaConflicto.createMany).not.toHaveBeenCalled()
     })
 
     it('does not link a court with itself', async () => {
       const { service, prisma } = makeService()
-      prisma.cancha.findUnique.mockResolvedValue({ id: 'c1', ownerId: 'owner1' })
+      asOwner(prisma)
 
-      await expect(service.update('owner1', 'c1', { comparteCon: ['c1'] })).rejects.toBeInstanceOf(
-        BadRequestException
-      )
+      await expect(
+        service.update('owner1', 'c1', { comparteCon: [{ canchaId: 'c1' }] })
+      ).rejects.toBeInstanceOf(BadRequestException)
     })
 
     it('links a new court with the ones given when it is created', async () => {
       const { service, prisma } = makeService()
-      prisma.cancha.count.mockResolvedValue(1)
+      prisma.cancha.findMany.mockResolvedValue([{ id: OTHER_A, cantidad: 3 }])
 
-      await service.create('owner1', { ...dto, comparteCon: [OTHER_A] })
+      await service.create('owner1', {
+        ...dto,
+        comparteCon: [{ canchaId: OTHER_A, otraNumero: 0 }],
+      })
 
       expect(prisma.cancha.create).toHaveBeenCalledWith({ data: { ...dto, ownerId: 'owner1' } })
       expect(prisma.canchaConflicto.createMany).toHaveBeenCalledWith({
         data: [
-          { canchaId: 'c1', otraCanchaId: OTHER_A },
-          { canchaId: OTHER_A, otraCanchaId: 'c1' },
+          { canchaId: 'c1', numero: 0, otraCanchaId: OTHER_A, otraNumero: 0 },
+          { canchaId: OTHER_A, numero: 0, otraCanchaId: 'c1', otraNumero: 0 },
         ],
       })
     })
@@ -242,7 +365,7 @@ describe('CanchasService', () => {
       prisma.cancha.findUnique.mockResolvedValue({ id: 'c1', ownerId: 'someone-else' })
 
       await expect(
-        service.update('owner1', 'c1', { comparteCon: [OTHER_A] })
+        service.update('owner1', 'c1', { comparteCon: [{ canchaId: OTHER_A }] })
       ).rejects.toBeInstanceOf(ForbiddenException)
       expect(prisma.canchaConflicto.createMany).not.toHaveBeenCalled()
     })

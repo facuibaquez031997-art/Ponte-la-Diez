@@ -35,8 +35,12 @@ interface Msg {
 }
 interface Slot {
   canchaId: string
+  /** Which court of the entry it is (1 to cantidad); 1 when the test does not care. */
+  numero?: number
   estado: 'FREE' | 'RESERVED' | 'BLOCKED'
   fechaHoraInicio: Date
+  /** A reserved slot whose booking still waits for its payment (it is not CONFIRMED). */
+  pendiente?: boolean
 }
 interface Reserva {
   estado: string
@@ -63,7 +67,7 @@ const makePrisma = (reservas: Record<string, Reserva> = {}) => {
   const mensajes: Msg[] = []
   // Slots the owner can offer; tests add, take or move them.
   const turnos: Record<string, Slot> = {}
-  const links: { canchaId: string; otraCanchaId: string }[] = []
+  const links: { canchaId: string; numero: number; otraCanchaId: string; otraNumero: number }[] = []
   let seq = 0
 
   const withRelations = (row: Row) => ({
@@ -123,6 +127,7 @@ const makePrisma = (reservas: Record<string, Reserva> = {}) => {
             estado: string
             canchaId?: { in: string[] }
             fechaHoraInicio?: { gte?: Date; lte?: Date }
+            reserva?: { is: { estado: string } }
             OR?: { canchaId: string; fechaHoraInicio: Date }[]
           }
         }) => {
@@ -132,6 +137,9 @@ const makePrisma = (reservas: Record<string, Reserva> = {}) => {
               if (slot.estado !== where.estado) return false
               if (where.canchaId) {
                 const { gte, lte } = where.fechaHoraInicio ?? {}
+                // Only CONFIRMED bookings count for the links: a reserved slot that still waits for
+                // its payment is left out.
+                if (where.reserva?.is.estado === 'CONFIRMED' && slot.pendiente) return false
                 return (
                   where.canchaId.in.includes(slot.canchaId) &&
                   (!gte || slot.fechaHoraInicio >= gte) &&
@@ -147,7 +155,11 @@ const makePrisma = (reservas: Record<string, Reserva> = {}) => {
                 )
               )
             })
-            .map((slot) => ({ canchaId: slot.canchaId, fechaHoraInicio: slot.fechaHoraInicio }))
+            .map((slot) => ({
+              canchaId: slot.canchaId,
+              numero: slot.numero ?? 1,
+              fechaHoraInicio: slot.fechaHoraInicio,
+            }))
         }
       ),
     },
@@ -777,8 +789,8 @@ describe('ConversacionesService', () => {
       // The conversation is about the court of 5 (CANCHA); 'cancha-7' stands for the other entry.
       const linkBothWays = (prisma: ReturnType<typeof setup>['prisma']) =>
         prisma.links.push(
-          { canchaId: CANCHA, otraCanchaId: 'cancha-7' },
-          { canchaId: 'cancha-7', otraCanchaId: CANCHA }
+          { canchaId: CANCHA, numero: 0, otraCanchaId: 'cancha-7', otraNumero: 0 },
+          { canchaId: 'cancha-7', numero: 0, otraCanchaId: CANCHA, otraNumero: 0 }
         )
 
       it('does not let the owner offer a slot while the linked entry is reserved at that hour', async () => {
@@ -849,6 +861,55 @@ describe('ConversacionesService', () => {
         delete prisma.turnos['t-linked']
 
         expect((await service.thread(PLAYER, id)).mensajes.at(-1)?.oferta?.disponible).toBe(true)
+      })
+
+      it('a booking of the linked entry that still waits for its payment does not block the offer', async () => {
+        const { prisma, service } = setup()
+        linkBothWays(prisma)
+        prisma.turnos['t-linked'] = {
+          canchaId: 'cancha-7',
+          estado: 'RESERVED',
+          pendiente: true,
+          fechaHoraInicio: TURNO,
+        }
+        const id = await openChat(service)
+        advance(5)
+
+        const sent = await service.send(OWNER, id, 'Tengo este', 't-free')
+        expect(sent.oferta?.disponible).toBe(true)
+
+        // Once that booking is paid, the offer is no longer bookable.
+        prisma.turnos['t-linked'].pendiente = false
+        expect((await service.thread(PLAYER, id)).mensajes.at(-1)?.oferta?.disponible).toBe(false)
+      })
+
+      it('only the court of the entry that is linked is blocked, not its other courts', async () => {
+        const { prisma, service } = setup()
+        // The court 2 of CANCHA is divided into the courts of cancha-7; the court 1 is a pure one.
+        prisma.links.push(
+          { canchaId: CANCHA, numero: 2, otraCanchaId: 'cancha-7', otraNumero: 0 },
+          { canchaId: 'cancha-7', numero: 0, otraCanchaId: CANCHA, otraNumero: 2 }
+        )
+        prisma.turnos['t-court-2'] = {
+          canchaId: CANCHA,
+          numero: 2,
+          estado: 'FREE',
+          fechaHoraInicio: TURNO,
+        }
+        prisma.turnos['t-linked'] = {
+          canchaId: 'cancha-7',
+          estado: 'RESERVED',
+          fechaHoraInicio: TURNO,
+        }
+        const id = await openChat(service)
+        advance(5)
+
+        // The pure court 1 (t-free) can be offered; the divided court 2 cannot.
+        const sent = await service.send(OWNER, id, 'Tengo la 1', 't-free')
+        expect(sent.oferta?.disponible).toBe(true)
+        await expect(service.send(OWNER, id, 'Tengo la 2', 't-court-2')).rejects.toThrow(
+          'Ese horario ya no está disponible'
+        )
       })
 
       it('without links an offer is not affected by what other entries have reserved', async () => {

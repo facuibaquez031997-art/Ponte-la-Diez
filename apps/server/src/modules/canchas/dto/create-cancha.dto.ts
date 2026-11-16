@@ -6,20 +6,22 @@ import {
   IsNumber,
   IsPositive,
   IsString,
-  IsUUID,
   Max,
   MaxLength,
   Min,
   MinLength,
   ValidateIf,
+  ValidateNested,
 } from 'class-validator'
+import { Type } from 'class-transformer'
 import { BARRIOS } from '../../users/barrios.js'
+import { ComparteConDto, MAX_LINKS } from './comparte-con.dto.js'
+import { MAX_CANTIDAD } from './limits.js'
 
 export const SURFACES = ['Sintético', 'Césped natural', 'Cemento', 'Parquet'] as const
 // Players per side: a court of 5, 7, 9 or 11.
 export const TAMANOS = [5, 7, 9, 11] as const
-// How many courts of one size an entry can have (that many slots at the same hour).
-export const MAX_CANTIDAD = 10
+export { MAX_CANTIDAD }
 
 export class CreateCanchaDto {
   @IsString()
@@ -50,14 +52,17 @@ export class CreateCanchaDto {
   cantidad?: number
 
   /**
-   * The other entries of the owner that use the same physical space (one court of 11 divided into
-   * 3 of 5): booking one blocks the others at that hour. Left out, the links do not change.
+   * The courts of the owner's other entries that use the same physical space as a court of this
+   * one (one court of 11 divided into 3 of 5): booking and paying one blocks the other. Each item
+   * names the other entry and which court of each entry is involved (0 = all). Left out, the
+   * links do not change; an empty list removes them.
    */
   @ValidateIf((_, value) => value !== undefined)
   @IsArray()
-  @ArrayMaxSize(20)
-  @IsUUID('all', { each: true })
-  comparteCon?: string[]
+  @ArrayMaxSize(MAX_LINKS)
+  @ValidateNested({ each: true })
+  @Type(() => ComparteConDto)
+  comparteCon?: ComparteConDto[]
 
   @IsNumber()
   @IsPositive()

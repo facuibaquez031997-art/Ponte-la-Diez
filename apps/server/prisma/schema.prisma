@@ -118,10 +118,14 @@ model Cancha {
 model CanchaConflicto {
   canchaId     String
   cancha       Cancha @relation("CanchaConflictos", fields: [canchaId], references: [id], onDelete: Cascade)
+  // Which court of this entry (1 to cantidad) shares the space; 0 = every court of the entry.
+  numero       Int    @default(0)
   otraCanchaId String
   otraCancha   Cancha @relation("CanchaConflictosDe", fields: [otraCanchaId], references: [id], onDelete: Cascade)
+  // Which court of the other entry shares the space; 0 = every court of that entry.
+  otraNumero   Int    @default(0)
 
-  @@id([canchaId, otraCanchaId])
+  @@id([canchaId, numero, otraCanchaId, otraNumero])
   @@index([otraCanchaId])
 }
 
@@ -247,6 +251,8 @@ model Notificacion {
 enum MotivoCierre {
   VENCIDA
   CANCELADA_DUENO
+  // The payment was approved but a court that shares the space was confirmed first.
+  ESPACIO_OCUPADO
 }
 
 enum EstadoDevolucion {

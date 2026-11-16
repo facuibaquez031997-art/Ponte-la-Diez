@@ -7,15 +7,18 @@ import {
   IsOptional,
   IsPositive,
   IsString,
-  IsUUID,
   Max,
   MaxLength,
   Min,
   MinLength,
   ValidateIf,
+  ValidateNested,
 } from 'class-validator'
+import { Type } from 'class-transformer'
 import { BARRIOS } from '../../users/barrios.js'
-import { MAX_CANTIDAD, SURFACES, TAMANOS } from './create-cancha.dto.js'
+import { SURFACES, TAMANOS } from './create-cancha.dto.js'
+import { ComparteConDto, MAX_LINKS } from './comparte-con.dto.js'
+import { MAX_CANTIDAD } from './limits.js'
 
 export class UpdateCanchaDto {
   @IsOptional()
@@ -49,12 +52,18 @@ export class UpdateCanchaDto {
   @Max(MAX_CANTIDAD, { message: `cantidad no puede superar ${MAX_CANTIDAD}` })
   cantidad?: number
 
-  /** The other entries of the owner that use the same physical space. Left out, nothing changes. */
+  /**
+   * The courts of the owner's other entries that use the same physical space as a court of this
+   * one (one court of 11 divided into 3 of 5): booking and paying one blocks the other. Each item
+   * names the other entry and which court of each entry is involved (0 = all). Left out, the
+   * links do not change; an empty list removes them.
+   */
   @ValidateIf((_, value) => value !== undefined)
   @IsArray()
-  @ArrayMaxSize(20)
-  @IsUUID('all', { each: true })
-  comparteCon?: string[]
+  @ArrayMaxSize(MAX_LINKS)
+  @ValidateNested({ each: true })
+  @Type(() => ComparteConDto)
+  comparteCon?: ComparteConDto[]
 
   @IsOptional()
   @IsNumber()
