@@ -20,12 +20,21 @@ export interface AgendaTurno {
   id: string
   fechaHoraInicio: string
   fechaHoraFin: string
+  /** Which court of the entry this slot is (1 to cantidad). */
+  numero: number
   estado: TurnoEstado
   reserva: AgendaReserva | null
 }
 
 export interface AgendaCancha {
-  cancha: { id: string; nombre: string; tipoSuperficie: string; jugadores: number | null }
+  cancha: {
+    id: string
+    nombre: string
+    tipoSuperficie: string
+    jugadores: number | null
+    /** How many courts of this size the entry has: that many slots per hour. */
+    cantidad: number
+  }
   turnos: AgendaTurno[]
 }
 

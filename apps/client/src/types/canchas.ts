@@ -3,6 +3,9 @@ export const SURFACES = ['Sintético', 'Césped natural', 'Cemento', 'Parquet'] 
 // Players per side: a court of 5, 7, 9 or 11.
 export const TAMANOS = [5, 7, 9, 11] as const
 
+// How many courts of one size an entry can have.
+export const MAX_CANTIDAD = 10
+
 export const MAX_FOTOS = 5
 
 export interface CanchaFoto {
@@ -28,6 +31,8 @@ export interface Cancha {
   tipoSuperficie: string
   // Courts created before the size existed have none until the owner sets it.
   jugadores: number | null
+  // How many courts of this size the owner has: that many slots exist at the same hour.
+  cantidad: number
   precioHora: number
   montoSena: number
   // Oldest first: the first photo is the cover.
@@ -36,6 +41,8 @@ export interface Cancha {
 
 export interface TurnoLibre {
   id: string
+  // Which court of the entry (1 to cantidad): the same hour can have several free slots.
+  numero: number
   fechaHoraInicio: string
   fechaHoraFin: string
 }

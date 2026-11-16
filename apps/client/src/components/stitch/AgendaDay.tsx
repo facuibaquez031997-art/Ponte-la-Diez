@@ -128,6 +128,11 @@ const AgendaDay = ({ agenda, canchaId, onPickSlot, compact = false }: AgendaDayP
                       <span className="w-16 shrink-0 font-display text-headline-sm text-on-surface">
                         {formatSlotTime(turno.fechaHoraInicio)}
                       </span>
+                      {cancha.cantidad > 1 && (
+                        <span className="shrink-0 rounded-full bg-surface-container px-2 py-1 text-label-sm uppercase text-on-surface-variant">
+                          Cancha {turno.numero}
+                        </span>
+                      )}
                       <span
                         className={`shrink-0 rounded-full px-3 py-1 font-display text-eyebrow-badge uppercase ${chip.className}`}
                       >

@@ -20,13 +20,23 @@ interface VenueCardProps {
 
 const VenueCard = ({ cancha, slots, fecha, canBook, onSlotTaken }: VenueCardProps) => {
   const [photoIndex, setPhotoIndex] = useState(0)
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedInicio, setSelectedInicio] = useState<string | null>(null)
   const [booking, setBooking] = useState(false)
   const { startingKey, error: chatError, start } = useStartConversacion()
   const { fotos } = cancha
   const current = fotos[photoIndex] ?? fotos[0]
-  // A slot that disappeared (other day, already taken) is no longer selected.
-  const selected = slots.find((slot) => slot.id === selectedId) ?? null
+  // One chip per hour: an entry with several courts has several free slots at the same hour.
+  const hours = slots.reduce<{ inicio: string; first: TurnoLibre; libres: number }[]>(
+    (groups, slot) => {
+      const group = groups.find((item) => item.inicio === slot.fechaHoraInicio)
+      if (group) group.libres += 1
+      else groups.push({ inicio: slot.fechaHoraInicio, first: slot, libres: 1 })
+      return groups
+    },
+    []
+  )
+  // An hour that disappeared (other day, no court left) is no longer selected.
+  const selected = hours.find((hour) => hour.inicio === selectedInicio)?.first ?? null
 
   return (
     <article className="group flex flex-col overflow-hidden rounded-xl bg-surface-container-lowest shadow-md">
@@ -117,27 +127,31 @@ const VenueCard = ({ cancha, slots, fecha, canBook, onSlotTaken }: VenueCardProp
             </p>
           ) : (
             <ul className="grid grid-cols-3 gap-1">
-              {slots.map((slot) => {
-                const isSelected = slot.id === selected?.id
+              {hours.map((hour) => {
+                const isSelected = hour.inicio === selected?.fechaHoraInicio
                 const content = (
                   <>
-                    <span>{formatSlotTime(slot.fechaHoraInicio)}</span>
+                    <span>{formatSlotTime(hour.inicio)}</span>
                     <span
                       className={`text-[10px] font-normal uppercase leading-none ${
                         isSelected ? 'text-secondary-container' : 'text-secondary'
                       }`}
                     >
-                      {isSelected ? 'Seleccionado' : 'Libre'}
+                      {isSelected
+                        ? 'Seleccionado'
+                        : hour.libres > 1
+                          ? `${hour.libres} libres`
+                          : 'Libre'}
                     </span>
                   </>
                 )
                 return (
-                  <li key={slot.id}>
+                  <li key={hour.inicio}>
                     {canBook ? (
                       <button
                         type="button"
                         aria-pressed={isSelected}
-                        onClick={() => setSelectedId(slot.id)}
+                        onClick={() => setSelectedInicio(hour.inicio)}
                         className={`flex h-11 w-full flex-col items-center justify-center rounded-lg text-base font-bold transition-all active:scale-[0.97] ${
                           isSelected
                             ? 'bg-primary-container text-on-primary ring-2 ring-secondary-container'
@@ -212,7 +226,7 @@ const VenueCard = ({ cancha, slots, fecha, canBook, onSlotTaken }: VenueCardProp
           onClose={() => setBooking(false)}
           onSlotTaken={() => {
             setBooking(false)
-            setSelectedId(null)
+            setSelectedInicio(null)
             onSlotTaken()
           }}
         />

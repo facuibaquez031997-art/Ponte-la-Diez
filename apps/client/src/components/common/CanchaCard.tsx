@@ -39,7 +39,11 @@ const CanchaCard = ({
         {cancha.tipoSuperficie} · {cancha.barrio}
       </p>
       {cancha.jugadores ? (
-        <p className="text-sm font-semibold text-secondary">{formatJugadores(cancha.jugadores)}</p>
+        <p className="text-sm font-semibold text-secondary">
+          {cancha.cantidad > 1
+            ? `${cancha.cantidad} canchas de ${formatJugadores(cancha.jugadores)}`
+            : formatJugadores(cancha.jugadores)}
+        </p>
       ) : (
         <p
           role="status"

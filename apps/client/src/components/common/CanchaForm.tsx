@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { getAuthErrorMessage } from '../../pages/Auth/authError'
-import { SURFACES, TAMANOS, type Cancha, type CanchaInput } from '../../types/canchas'
+import { MAX_CANTIDAD, SURFACES, TAMANOS, type Cancha, type CanchaInput } from '../../types/canchas'
 import { MAX_MONEY, formatMoney, onlyDigits } from '../../utils/money'
 import BarrioCombobox from './BarrioCombobox'
 
@@ -21,6 +21,7 @@ const CanchaForm = ({ cancha, onSubmit, onCancel }: CanchaFormProps) => {
   const [tipoSuperficie, setTipoSuperficie] = useState(cancha?.tipoSuperficie ?? SURFACES[0])
   // "" until the owner chooses: a court cannot be saved without its size, not even an old one.
   const [jugadores, setJugadores] = useState(cancha?.jugadores ? String(cancha.jugadores) : '')
+  const [cantidad, setCantidad] = useState(String(cancha?.cantidad ?? 1))
   const [precioHora, setPrecioHora] = useState(cancha ? String(cancha.precioHora) : '')
   const [montoSena, setMontoSena] = useState(cancha ? String(cancha.montoSena) : '')
   const [saving, setSaving] = useState(false)
@@ -37,6 +38,7 @@ const CanchaForm = ({ cancha, onSubmit, onCancel }: CanchaFormProps) => {
         barrio,
         tipoSuperficie,
         jugadores: Number(jugadores),
+        cantidad: Number(cantidad),
         precioHora: Number(precioHora),
         montoSena: Number(montoSena),
       })
@@ -139,6 +141,29 @@ const CanchaForm = ({ cancha, onSubmit, onCancel }: CanchaFormProps) => {
               </option>
             ))}
           </select>
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="cancha-cantidad" className={LABEL_CLASS}>
+            Cuántas canchas de este tamaño tenés
+          </label>
+          <select
+            id="cancha-cantidad"
+            value={cantidad}
+            onChange={(e) => setCantidad(e.target.value)}
+            className={`${FIELD_CLASS} cursor-pointer`}
+          >
+            {Array.from({ length: MAX_CANTIDAD }, (_, index) => index + 1).map((count) => (
+              <option key={count} value={String(count)}>
+                {count === 1 ? '1 cancha' : `${count} canchas`}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-on-surface-variant">
+            {Number(cantidad) > 1
+              ? `Cada horario va a tener ${cantidad} turnos a la vez: si un jugador reserva una cancha, las otras siguen libres.`
+              : 'Si tenés más de una cancha de este tamaño, cargala una sola vez con la cantidad.'}
+          </p>
         </div>
 
         <div className="flex flex-col gap-1.5">
