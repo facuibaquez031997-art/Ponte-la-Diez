@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useStartConversacion } from '../../hooks/useStartConversacion'
 import type { Cancha, TurnoLibre } from '../../types/canchas'
-import { formatJugadores } from '../../utils/canchas'
+import { consultaMessage, formatJugadores } from '../../utils/canchas'
 import { formatSlotTime } from '../../utils/dates'
 import { formatPesos } from '../../utils/money'
 import BookingDialog from '../common/BookingDialog'
@@ -177,13 +177,23 @@ const VenueCard = ({ cancha, slots, fecha, canBook, onSlotTaken }: VenueCardProp
             <button
               type="button"
               disabled={startingKey !== null}
-              onClick={() => start({ canchaId: cancha.id })}
+              onClick={() =>
+                start(
+                  { canchaId: cancha.id },
+                  // With a slot chosen the owner gets a ready message about it.
+                  selected ? consultaMessage(cancha, selected.fechaHoraInicio) : undefined
+                )
+              }
               className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-surface-container text-sm font-bold text-on-surface transition-all hover:bg-surface-container-high active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
             >
               <span aria-hidden="true" className="material-symbols-outlined text-[20px]">
                 chat
               </span>
-              {startingKey !== null ? 'Abriendo el chat...' : 'Consultar al dueño'}
+              {startingKey !== null
+                ? 'Abriendo el chat...'
+                : selected
+                  ? 'Consultar por este horario'
+                  : 'Consultar al dueño'}
             </button>
             {chatError && (
               <p role="alert" className="mt-2 text-xs text-error">
