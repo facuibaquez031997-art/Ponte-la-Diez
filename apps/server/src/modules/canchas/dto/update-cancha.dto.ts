@@ -1,5 +1,6 @@
 import {
   IsIn,
+  IsInt,
   IsNumber,
   IsOptional,
   IsPositive,
@@ -8,9 +9,10 @@ import {
   MaxLength,
   Min,
   MinLength,
+  ValidateIf,
 } from 'class-validator'
 import { BARRIOS } from '../../users/barrios.js'
-import { SURFACES, TAMANOS } from './create-cancha.dto.js'
+import { MAX_CANTIDAD, SURFACES, TAMANOS } from './create-cancha.dto.js'
 
 export class UpdateCanchaDto {
   @IsOptional()
@@ -33,9 +35,16 @@ export class UpdateCanchaDto {
   @IsIn(SURFACES)
   tipoSuperficie?: string
 
-  @IsOptional()
+  // Not @IsOptional: it would let a null through, and null is not a size nor a quantity.
+  @ValidateIf((_, value) => value !== undefined)
   @IsIn(TAMANOS, { message: 'jugadores debe ser 5, 7, 9 u 11' })
   jugadores?: number
+
+  @ValidateIf((_, value) => value !== undefined)
+  @IsInt()
+  @Min(1)
+  @Max(MAX_CANTIDAD, { message: `cantidad no puede superar ${MAX_CANTIDAD}` })
+  cantidad?: number
 
   @IsOptional()
   @IsNumber()

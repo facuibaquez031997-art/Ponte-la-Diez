@@ -21,11 +21,18 @@ const makePrisma = () => ({
   },
 })
 
-const existing = (id: string, iso: string, estado: string) => ({
+const existing = (id: string, iso: string, estado: string, numero = 1) => ({
   id,
   fechaHoraInicio: slot(iso),
   estado,
+  numero,
 })
+
+type Created = { data: { fechaHoraInicio: Date; numero: number }[] }
+const created = (prisma: ReturnType<typeof makePrisma>) =>
+  (prisma.turno.createMany.mock.calls[0]?.[0] as Created | undefined)?.data.map(
+    (d) => `${d.fechaHoraInicio.toISOString().slice(11, 16)}#${d.numero}`
+  )
 
 describe('TurnosService.sync', () => {
   it('creates the missing slots with a one-hour end', async () => {
@@ -128,6 +135,82 @@ describe('TurnosService.sync', () => {
   })
 })
 
+describe('TurnosService.sync with several courts of the same size', () => {
+  const withCourts = (cantidad: number) => {
+    const prisma = makePrisma()
+    prisma.cancha.findUnique.mockResolvedValue({ id: 'c1', cantidad })
+    return prisma
+  }
+
+  it('numbers the slots of a single court 1, as before', async () => {
+    const prisma = makePrisma()
+    await new TurnosService(prisma as never).sync('c1', now, 1)
+    expect(created(prisma)).toEqual(['20:00#1', '21:00#1', '22:00#1'])
+  })
+
+  it('creates as many slots per hour as courts the entry has', async () => {
+    const prisma = withCourts(2)
+    await new TurnosService(prisma as never).sync('c1', now, 1)
+    expect(created(prisma)).toEqual([
+      '20:00#1',
+      '20:00#2',
+      '21:00#1',
+      '21:00#2',
+      '22:00#1',
+      '22:00#2',
+    ])
+  })
+
+  it('only adds the missing courts when the quantity goes up', async () => {
+    const prisma = withCourts(2)
+    prisma.turno.findMany.mockResolvedValue([
+      existing('a', '2026-11-09T20:00:00.000Z', 'FREE', 1),
+      existing('b', '2026-11-09T21:00:00.000Z', 'RESERVED', 1),
+      existing('c', '2026-11-09T22:00:00.000Z', 'FREE', 1),
+    ])
+    await new TurnosService(prisma as never).sync('c1', now, 1)
+    expect(created(prisma)).toEqual(['20:00#2', '21:00#2', '22:00#2'])
+    expect(prisma.turno.deleteMany).not.toHaveBeenCalled()
+  })
+
+  it('removes the FREE slots above the quantity when it goes down, and keeps the booked one', async () => {
+    const prisma = withCourts(1)
+    prisma.turno.findMany.mockResolvedValue([
+      existing('a1', '2026-11-09T20:00:00.000Z', 'FREE', 1),
+      existing('a2', '2026-11-09T20:00:00.000Z', 'FREE', 2),
+      existing('b1', '2026-11-09T21:00:00.000Z', 'FREE', 1),
+      existing('b2', '2026-11-09T21:00:00.000Z', 'RESERVED', 2),
+      existing('c1', '2026-11-09T22:00:00.000Z', 'FREE', 1),
+      existing('c2', '2026-11-09T22:00:00.000Z', 'BLOCKED', 2),
+    ])
+    await new TurnosService(prisma as never).sync('c1', now, 1)
+    expect(prisma.turno.deleteMany).toHaveBeenCalledWith({
+      where: { id: { in: ['a2'] }, estado: 'FREE', reserva: null },
+    })
+    expect(prisma.turno.createMany).not.toHaveBeenCalled()
+  })
+
+  it('is idempotent: with all the courts already there it creates and removes nothing', async () => {
+    const prisma = withCourts(2)
+    prisma.turno.findMany.mockResolvedValue(
+      ['20', '21', '22'].flatMap((hour) => [
+        existing(`${hour}-1`, `2026-11-09T${hour}:00:00.000Z`, 'FREE', 1),
+        existing(`${hour}-2`, `2026-11-09T${hour}:00:00.000Z`, 'FREE', 2),
+      ])
+    )
+    await new TurnosService(prisma as never).sync('c1', now, 1)
+    expect(prisma.turno.createMany).not.toHaveBeenCalled()
+    expect(prisma.turno.deleteMany).not.toHaveBeenCalled()
+  })
+
+  it('a court that does not exist anymore is treated as a single court', async () => {
+    const prisma = makePrisma()
+    prisma.cancha.findUnique.mockResolvedValue(null)
+    await new TurnosService(prisma as never).sync('c1', now, 1)
+    expect(created(prisma)).toEqual(['20:00#1', '21:00#1', '22:00#1'])
+  })
+})
+
 describe('TurnosService.listFree', () => {
   it('404 when the court does not exist', async () => {
     const prisma = makePrisma()
@@ -160,7 +243,21 @@ describe('TurnosService.listFree', () => {
         lt: new Date('2026-11-10T03:00:00.000Z'),
       },
     })
-    expect(listCall.orderBy).toEqual({ fechaHoraInicio: 'asc' })
+    // By hour, and within one hour by the number of the court.
+    expect(listCall.orderBy).toEqual([{ fechaHoraInicio: 'asc' }, { numero: 'asc' }])
+  })
+
+  it('brings the number of the court of each free slot', async () => {
+    const prisma = makePrisma()
+    await new TurnosService(prisma as never).listFree('c1', '2026-11-09', now)
+    const calls = prisma.turno.findMany.mock.calls
+    const listCall = calls[calls.length - 1][0] as { select: Record<string, boolean> }
+    expect(listCall.select).toEqual({
+      id: true,
+      fechaHoraInicio: true,
+      fechaHoraFin: true,
+      numero: true,
+    })
   })
 
   it('frees the expired holds of that court before it syncs and lists', async () => {

@@ -11,7 +11,10 @@ import {
   windowEnd,
 } from './turnos-slots.js'
 
-export type FreeTurno = Pick<Turno, 'id' | 'fechaHoraInicio' | 'fechaHoraFin'>
+export type FreeTurno = Pick<Turno, 'id' | 'fechaHoraInicio' | 'fechaHoraFin' | 'numero'>
+
+/** A slot is one court at one hour: with several courts the same hour has several slots. */
+const slotKey = (start: Date, numero: number): string => `${start.getTime()}#${numero}`
 
 /** The booking that holds a slot, as the owner of the court sees it in the agenda. */
 export interface AgendaReserva {
@@ -55,28 +58,38 @@ export class TurnosService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Brings the slots of a court in line with its weekly schedule for the next days:
-   * creates the missing ones and removes the FREE ones that left the schedule.
-   * RESERVED and BLOCKED slots are never touched. Safe to run any number of times.
+   * Brings the slots of a court in line with its weekly schedule for the next days: creates the
+   * missing ones and removes the FREE ones that left the schedule. A court entry with several
+   * courts (`cantidad`) has that many slots at the same hour. RESERVED and BLOCKED slots are never
+   * touched. Safe to run any number of times.
    */
   async sync(canchaId: string, now: Date = new Date(), days: number = WINDOW_DAYS): Promise<void> {
-    const franjas = await this.prisma.horarioCancha.findMany({ where: { canchaId } })
-    const desired = buildSlots(franjas, now, days)
-    const desiredTimes = new Set(desired.map((slot) => slot.getTime()))
+    const [cancha, franjas] = await Promise.all([
+      this.prisma.cancha.findUnique({ where: { id: canchaId }, select: { cantidad: true } }),
+      this.prisma.horarioCancha.findMany({ where: { canchaId } }),
+    ])
+    const cantidad = cancha?.cantidad ?? 1
+    const desired = buildSlots(franjas, now, days).flatMap((start) =>
+      Array.from({ length: cantidad }, (_, index) => ({ start, numero: index + 1 }))
+    )
+    const desiredKeys = new Set(desired.map((slot) => slotKey(slot.start, slot.numero)))
 
     const existing = await this.prisma.turno.findMany({
       where: { canchaId, fechaHoraInicio: { gte: now, lt: windowEnd(now, days) } },
-      select: { id: true, fechaHoraInicio: true, estado: true },
+      select: { id: true, fechaHoraInicio: true, numero: true, estado: true },
     })
-    const existingTimes = new Set(existing.map((turno) => turno.fechaHoraInicio.getTime()))
+    const existingKeys = new Set(
+      existing.map((turno) => slotKey(turno.fechaHoraInicio, turno.numero))
+    )
 
-    const missing = desired.filter((slot) => !existingTimes.has(slot.getTime()))
+    const missing = desired.filter((slot) => !existingKeys.has(slotKey(slot.start, slot.numero)))
     if (missing.length > 0) {
       await this.prisma.turno.createMany({
-        data: missing.map((start) => ({
+        data: missing.map(({ start, numero }) => ({
           canchaId,
           fechaHoraInicio: start,
           fechaHoraFin: new Date(start.getTime() + SLOT_MS),
+          numero,
         })),
         skipDuplicates: true,
       })
@@ -84,7 +97,8 @@ export class TurnosService {
 
     const stale = existing
       .filter(
-        (turno) => turno.estado === 'FREE' && !desiredTimes.has(turno.fechaHoraInicio.getTime())
+        (turno) =>
+          turno.estado === 'FREE' && !desiredKeys.has(slotKey(turno.fechaHoraInicio, turno.numero))
       )
       .map((turno) => turno.id)
     if (stale.length > 0) {
@@ -191,8 +205,8 @@ export class TurnosService {
         estado: 'FREE',
         fechaHoraInicio: day ? { gte: from, lt: day.end } : { gte: from },
       },
-      orderBy: { fechaHoraInicio: 'asc' },
-      select: { id: true, fechaHoraInicio: true, fechaHoraFin: true },
+      orderBy: [{ fechaHoraInicio: 'asc' }, { numero: 'asc' }],
+      select: { id: true, fechaHoraInicio: true, fechaHoraFin: true, numero: true },
     })
   }
 }

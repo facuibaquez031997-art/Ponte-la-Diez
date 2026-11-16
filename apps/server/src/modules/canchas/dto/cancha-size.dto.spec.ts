@@ -37,6 +37,22 @@ describe('size of the court (players per side)', () => {
     })
   })
 
+  describe('how many courts of that size there are', () => {
+    it('is optional when creating: one court if left out', () => {
+      expect(create({ ...valid, jugadores: 5 })).toHaveLength(0)
+    })
+
+    it.each([1, 2, 3, 10])('accepts %i courts', (cantidad) => {
+      expect(create({ ...valid, jugadores: 5, cantidad })).toHaveLength(0)
+      expect(update({ cantidad })).toHaveLength(0)
+    })
+
+    it.each([0, -1, 11, 2.5, '2', null])('refuses %s', (cantidad) => {
+      expect(create({ ...valid, jugadores: 5, cantidad })).not.toHaveLength(0)
+      expect(update({ cantidad })).not.toHaveLength(0)
+    })
+  })
+
   describe('editing a court', () => {
     it('does not require the size, so the other fields can change alone', () => {
       expect(update({ nombre: 'Otro nombre' })).toHaveLength(0)
@@ -45,6 +61,10 @@ describe('size of the court (players per side)', () => {
     it('accepts a valid size and refuses an invalid one', () => {
       expect(update({ jugadores: 11 })).toHaveLength(0)
       expect(update({ jugadores: 6 })).not.toHaveLength(0)
+    })
+
+    it('does not let the size be cleared with null', () => {
+      expect(update({ jugadores: null })).not.toHaveLength(0)
     })
   })
 

@@ -99,6 +99,8 @@ model Cancha {
   tipoSuperficie String
   // Players per side: 5, 7, 9 or 11. Courts created before it existed have none until the owner sets it.
   jugadores      Int?
+  // How many courts of this size the owner has: that many slots exist at the same hour.
+  cantidad       Int                @default(1)
   precioHora     Float
   montoSena      Float
   turnos         Turno[]
@@ -138,9 +140,11 @@ model Turno {
   fechaHoraInicio DateTime
   fechaHoraFin    DateTime
   estado          TurnoState @default(FREE)
+  // Which of the courts of the entry this slot is (1 to cantidad).
+  numero          Int        @default(1)
   reserva         Reserva?
 
-  @@unique([canchaId, fechaHoraInicio])
+  @@unique([canchaId, fechaHoraInicio, numero])
 }
 
 model Reserva {
