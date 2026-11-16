@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import CanchaCard from '../../components/common/CanchaCard'
 import CanchaForm from '../../components/common/CanchaForm'
+import { describeLink } from '../../utils/canchas'
 import ConfirmDialog from '../../components/common/ConfirmDialog'
 import { canchasService } from '../../services/canchas.service'
 import type { Cancha, CanchaInput, Franja } from '../../types/canchas'
@@ -125,9 +126,10 @@ const OwnerCanchasPage = () => {
               key={cancha.id}
               cancha={cancha}
               horarios={horarios[cancha.id]}
-              comparteConNombres={(cancha.comparteCon ?? []).flatMap(
-                (id) => canchas.find((item) => item.id === id)?.nombre ?? []
-              )}
+              comparteConNombres={(cancha.comparteCon ?? []).flatMap((link) => {
+                const otra = canchas.find((item) => item.id === link.canchaId)
+                return otra ? describeLink(link, otra.nombre, cancha.cantidad, otra.cantidad) : []
+              })}
               onEdit={(target) => startForm({ kind: 'edit', cancha: target })}
               onDelete={setDeleting}
               onPhotosChanged={load}

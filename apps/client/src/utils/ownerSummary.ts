@@ -42,7 +42,9 @@ export const summarize = (
 
   const expired = historial.filter((h) => h.motivo === 'VENCIDA').length
   const cancelled = historial.filter((h) => h.motivo === 'CANCELADA_DUENO').length
-  const attempts = confirmed.length + expired + cancelled
+  // A payment that came in after a court sharing the space was confirmed is a lost booking too.
+  const spaceTaken = historial.filter((h) => h.motivo === 'ESPACIO_OCUPADO').length
+  const attempts = confirmed.length + expired + cancelled + spaceTaken
 
   return {
     collected,

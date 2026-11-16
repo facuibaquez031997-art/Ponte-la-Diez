@@ -43,7 +43,7 @@ export interface OwnerReserva extends Reserva {
   conversacionId: string | null
 }
 
-export type MotivoCierre = 'VENCIDA' | 'CANCELADA_DUENO'
+export type MotivoCierre = 'VENCIDA' | 'CANCELADA_DUENO' | 'ESPACIO_OCUPADO'
 
 export type EstadoDevolucion = 'NO_CORRESPONDE' | 'PENDIENTE' | 'HECHA'
 

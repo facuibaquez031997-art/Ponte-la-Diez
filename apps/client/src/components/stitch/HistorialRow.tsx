@@ -12,6 +12,10 @@ interface HistorialRowProps {
 const MOTIVO_CHIP = {
   VENCIDA: { label: 'Vencida', className: 'bg-surface-container-high text-on-surface-variant' },
   CANCELADA_DUENO: { label: 'Cancelada', className: 'bg-error-container text-on-error-container' },
+  ESPACIO_OCUPADO: {
+    label: 'Espacio ocupado',
+    className: 'bg-error-container text-on-error-container',
+  },
 } as const
 
 const HistorialRow = ({ item, onMarkRefunded, disabled = false }: HistorialRowProps) => {
@@ -34,7 +38,9 @@ const HistorialRow = ({ item, onMarkRefunded, disabled = false }: HistorialRowPr
         <span className="truncate text-sm text-on-surface-variant">
           {item.motivo === 'VENCIDA'
             ? `${item.jugador.nombre} no pagó a tiempo`
-            : `Cancelaste el turno de ${item.jugador.nombre}`}
+            : item.motivo === 'ESPACIO_OCUPADO'
+              ? `${item.jugador.nombre} pagó, pero otra cancha que comparte el espacio se confirmó antes`
+              : `Cancelaste el turno de ${item.jugador.nombre}`}
         </span>
       </div>
 

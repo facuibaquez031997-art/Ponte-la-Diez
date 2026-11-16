@@ -19,3 +19,20 @@ export const consultaMessage = (cancha: ConsultaCancha, fechaHoraInicio: string)
   const details = size ? `${size}, ${cancha.barrio}` : cancha.barrio
   return `Hola, quería consultar por la cancha ${cancha.nombre} (${details}) para el ${formatSlotDate(fechaHoraInicio)} a las ${formatSlotTime(fechaHoraInicio)} hs.`
 }
+
+/**
+ * Says which courts a link joins, for the card of the owner: the other entry and, when an entry
+ * has several courts, which court of each one is involved.
+ */
+export const describeLink = (
+  link: { numero: number; otraNumero: number },
+  otraNombre: string,
+  cantidad: number,
+  otraCantidad: number
+): string => {
+  const mine = link.numero > 0 && cantidad > 1 ? `la cancha ${link.numero} de esta` : ''
+  const theirs =
+    link.otraNumero > 0 && otraCantidad > 1 ? `la cancha ${link.otraNumero} de ${otraNombre}` : ''
+  const detail = [mine, theirs].filter(Boolean).join(' con ')
+  return detail ? `${otraNombre} (${detail})` : otraNombre
+}

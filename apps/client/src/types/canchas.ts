@@ -33,12 +33,25 @@ export interface Cancha {
   jugadores: number | null
   // How many courts of this size the owner has: that many slots exist at the same hour.
   cantidad: number
-  // Only in the owner's own list: the other entries that use the same physical space.
-  comparteCon?: string[]
+  // Only in the owner's own list: the courts of other entries that use the same physical space.
+  comparteCon?: ComparteCon[]
   precioHora: number
   montoSena: number
   // Oldest first: the first photo is the cover.
   fotos: CanchaFoto[]
+}
+
+/**
+ * A court of an entry that uses the same physical space as a court of another entry (one court
+ * of 11 divided into 3 of 5): once one is booked and paid, the other is blocked at that hour.
+ */
+export interface ComparteCon {
+  /** The other entry. */
+  canchaId: string
+  /** Which court of THIS entry (1 to its quantity); 0 = all of them. */
+  numero: number
+  /** Which court of the OTHER entry; 0 = all of them. */
+  otraNumero: number
 }
 
 export interface TurnoLibre {
@@ -61,7 +74,7 @@ export interface CanchaFilters {
 // The size is required to save a court, even when the stored one has none yet.
 export type CanchaInput = Omit<Cancha, 'id' | 'ownerId' | 'fotos' | 'jugadores' | 'comparteCon'> & {
   jugadores: number
-  comparteCon?: string[]
+  comparteCon?: ComparteCon[]
 }
 
 // Day of the week as the API sends it: 0 = Sunday ... 6 = Saturday.

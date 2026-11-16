@@ -1,6 +1,13 @@
 import { useState, type FormEvent } from 'react'
 import { getAuthErrorMessage } from '../../pages/Auth/authError'
-import { MAX_CANTIDAD, SURFACES, TAMANOS, type Cancha, type CanchaInput } from '../../types/canchas'
+import {
+  MAX_CANTIDAD,
+  SURFACES,
+  TAMANOS,
+  type Cancha,
+  type CanchaInput,
+  type ComparteCon,
+} from '../../types/canchas'
 import { formatJugadores } from '../../utils/canchas'
 import { MAX_MONEY, formatMoney, onlyDigits } from '../../utils/money'
 import BarrioCombobox from './BarrioCombobox'
@@ -25,9 +32,22 @@ const CanchaForm = ({ cancha, otras = [], onSubmit, onCancel }: CanchaFormProps)
   // "" until the owner chooses: a court cannot be saved without its size, not even an old one.
   const [jugadores, setJugadores] = useState(cancha?.jugadores ? String(cancha.jugadores) : '')
   const [cantidad, setCantidad] = useState(String(cancha?.cantidad ?? 1))
-  const [comparteCon, setComparteCon] = useState<string[]>(cancha?.comparteCon ?? [])
+  const [comparteCon, setComparteCon] = useState<ComparteCon[]>(cancha?.comparteCon ?? [])
   const [precioHora, setPrecioHora] = useState(cancha ? String(cancha.precioHora) : '')
   const [montoSena, setMontoSena] = useState(cancha ? String(cancha.montoSena) : '')
+  // The other entries are linked one by one; the numbers say which court of each is involved.
+  const linkOf = (id: string) => comparteCon.find((link) => link.canchaId === id)
+  const toggleLink = (id: string, on: boolean) =>
+    setComparteCon((current) =>
+      on
+        ? [...current, { canchaId: id, numero: 0, otraNumero: 0 }]
+        : current.filter((link) => link.canchaId !== id)
+    )
+  const changeLink = (id: string, change: Partial<ComparteCon>) =>
+    setComparteCon((current) => {
+      const index = current.findIndex((link) => link.canchaId === id)
+      return current.map((link, i) => (i === index ? { ...link, ...change } : link))
+    })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -207,34 +227,75 @@ const CanchaForm = ({ cancha, otras = [], onSubmit, onCancel }: CanchaFormProps)
       </div>
 
       {otras.length > 0 && (
-        <fieldset className="flex flex-col gap-2 rounded-2xl bg-surface-container-low p-4">
+        <fieldset className="flex flex-col gap-3 rounded-2xl bg-surface-container-low p-4">
           <legend className={LABEL_CLASS}>Comparte el espacio con</legend>
           <p className="text-xs text-on-surface-variant">
-            Marcá las canchas que usan el mismo lugar físico. Cuando se reserva una, las otras se
-            bloquean en ese horario. Por ejemplo, una cancha de 11 que se divide en 3 de 5: en la de
-            11 marcá la de 5, y en la de 5 marcá la de 11.
+            Marcá las canchas que usan el mismo lugar físico. Cuando una se reserva y se paga, las
+            otras se bloquean en ese horario. Por ejemplo, una cancha de 11 que se divide en 3 de 5:
+            en la de 5 marcá la de 11. Si tenés varias canchas de 11 y solo una se divide, elegí
+            cuál. Las que no marques no se ven afectadas.
           </p>
-          {otras.map((otra) => (
-            <label key={otra.id} className="flex cursor-pointer items-center gap-3 text-sm">
-              <input
-                type="checkbox"
-                checked={comparteCon.includes(otra.id)}
-                onChange={(e) =>
-                  setComparteCon((current) =>
-                    e.target.checked
-                      ? [...current, otra.id]
-                      : current.filter((id) => id !== otra.id)
-                  )
-                }
-                className="h-4 w-4 cursor-pointer accent-secondary"
-              />
-              <span className="font-semibold text-on-surface">{otra.nombre}</span>
-              <span className="text-on-surface-variant">
-                {otra.jugadores ? formatJugadores(otra.jugadores) : 'sin tamaño'}
-                {otra.cantidad > 1 ? ` · ${otra.cantidad} canchas` : ''}
-              </span>
-            </label>
-          ))}
+          {otras.map((otra) => {
+            const link = linkOf(otra.id)
+            return (
+              <div key={otra.id} className="flex flex-col gap-2">
+                <label className="flex cursor-pointer items-center gap-3 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={link !== undefined}
+                    onChange={(e) => toggleLink(otra.id, e.target.checked)}
+                    className="h-4 w-4 cursor-pointer accent-secondary"
+                  />
+                  <span className="font-semibold text-on-surface">{otra.nombre}</span>
+                  <span className="text-on-surface-variant">
+                    {otra.jugadores ? formatJugadores(otra.jugadores) : 'sin tamaño'}
+                    {otra.cantidad > 1 ? ` · ${otra.cantidad} canchas` : ''}
+                  </span>
+                </label>
+
+                {link && (Number(cantidad) > 1 || otra.cantidad > 1) && (
+                  <div className="ml-7 grid gap-2 sm:grid-cols-2">
+                    {Number(cantidad) > 1 && (
+                      <label className="flex flex-col gap-1 text-xs text-on-surface-variant">
+                        De esta cancha, la que lo comparte
+                        <select
+                          value={link.numero}
+                          onChange={(e) => changeLink(otra.id, { numero: Number(e.target.value) })}
+                          className={`${FIELD_CLASS} cursor-pointer`}
+                        >
+                          <option value={0}>Todas</option>
+                          {Array.from({ length: Number(cantidad) }, (_, i) => i + 1).map((n) => (
+                            <option key={n} value={n}>
+                              La cancha {n}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    )}
+                    {otra.cantidad > 1 && (
+                      <label className="flex flex-col gap-1 text-xs text-on-surface-variant">
+                        De {otra.nombre}, la que lo comparte
+                        <select
+                          value={link.otraNumero}
+                          onChange={(e) =>
+                            changeLink(otra.id, { otraNumero: Number(e.target.value) })
+                          }
+                          className={`${FIELD_CLASS} cursor-pointer`}
+                        >
+                          <option value={0}>Todas</option>
+                          {Array.from({ length: otra.cantidad }, (_, i) => i + 1).map((n) => (
+                            <option key={n} value={n}>
+                              La cancha {n}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </fieldset>
       )}
 

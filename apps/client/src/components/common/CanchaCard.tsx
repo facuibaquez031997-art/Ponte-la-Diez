@@ -46,8 +46,8 @@ const CanchaCard = ({
           <span aria-hidden="true" className="material-symbols-outlined text-[16px] text-secondary">
             link
           </span>
-          Comparte el espacio con {comparteConNombres.join(', ')}: si se reserva una, las otras se
-          bloquean.
+          Comparte el espacio con {comparteConNombres.join(', ')}: cuando una se reserva y se paga,
+          las otras se bloquean.
         </p>
       )}
       {cancha.jugadores ? (
