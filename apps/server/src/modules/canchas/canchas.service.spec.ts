@@ -1,6 +1,11 @@
 import 'reflect-metadata'
 import { vi } from 'vitest'
-import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common'
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common'
 import { CanchasService } from './canchas.service.js'
 
 const dto = {
@@ -18,6 +23,7 @@ const makePrisma = () => {
     cancha: {
       create: vi.fn(async ({ data }: { data: object }) => ({ id: 'c1', ...data })),
       findMany: vi.fn(async (_args?: object) => [] as unknown[]),
+      count: vi.fn(async (_args?: object) => 0),
       findUnique: vi.fn(async (_args?: object) => null as unknown),
       update: vi.fn(async ({ data }: { data: object }) => ({ id: 'c1', ...data })),
       delete: vi.fn(async (_args?: object) => ({ id: 'c1' })),
@@ -25,6 +31,10 @@ const makePrisma = () => {
     turno: {
       count: vi.fn(async (_args?: object) => 0),
       deleteMany: vi.fn(async (_args?: object) => ({ count: 0 })),
+    },
+    canchaConflicto: {
+      deleteMany: vi.fn(async (_args?: object) => ({ count: 0 })),
+      createMany: vi.fn(async (_args?: object) => ({ count: 0 })),
     },
     canchaFoto: { findMany: vi.fn(async (_args?: object) => [] as unknown[]) },
     historialReserva: { count: vi.fn(async (_args?: object) => 0) },
@@ -111,11 +121,130 @@ describe('CanchasService', () => {
     prisma.cancha.findUnique.mockResolvedValue({ id: 'c1', ownerId: 'owner1' })
     await service.findOne('c1')
     for (const call of prisma.cancha.findMany.mock.calls) {
-      expect(call[0]).toEqual(expect.objectContaining({ include: FOTOS_INCLUDE }))
+      expect(call[0]).toEqual(
+        expect.objectContaining({ include: expect.objectContaining(FOTOS_INCLUDE) })
+      )
     }
     expect(prisma.cancha.findUnique).toHaveBeenCalledWith({
       where: { id: 'c1' },
       include: FOTOS_INCLUDE,
+    })
+  })
+
+  it('does not bring the links between entries in the public list: only the owner sees them', async () => {
+    const { service, prisma } = makeService()
+    await service.list({})
+    await service.findOne('c1').catch(() => undefined)
+    const publicCall = prisma.cancha.findMany.mock.calls[0][0] as { include: object }
+    expect(publicCall.include).toEqual(FOTOS_INCLUDE)
+  })
+
+  describe('entries that share the physical space', () => {
+    const OTHER_A = '8f0c1f7e-3b9e-4c55-9d4b-0d6a5a3a9f11'
+    const OTHER_B = '3a1f6d52-7c41-4a7e-8b0e-5d2c1e9f4a22'
+
+    it('shows each of my courts with the ids of the entries it shares the space with', async () => {
+      const { service, prisma } = makeService()
+      prisma.cancha.findMany.mockResolvedValue([
+        { id: 'c1', comparteCon: [{ otraCanchaId: OTHER_A }, { otraCanchaId: OTHER_B }] },
+        { id: 'c2', comparteCon: [] },
+      ])
+
+      const mine = await service.listMine('owner1')
+
+      expect(mine.map((c) => [c.id, c.comparteCon])).toEqual([
+        ['c1', [OTHER_A, OTHER_B]],
+        ['c2', []],
+      ])
+    })
+
+    it('links both ways, so booking either one blocks the other', async () => {
+      const { service, prisma } = makeService()
+      prisma.cancha.findUnique.mockResolvedValue({ id: 'c1', ownerId: 'owner1' })
+      prisma.cancha.count.mockResolvedValue(2)
+
+      await service.update('owner1', 'c1', { comparteCon: [OTHER_A, OTHER_B] })
+
+      expect(prisma.canchaConflicto.deleteMany).toHaveBeenCalledWith({
+        where: { OR: [{ canchaId: 'c1' }, { otraCanchaId: 'c1' }] },
+      })
+      expect(prisma.canchaConflicto.createMany).toHaveBeenCalledWith({
+        data: [
+          { canchaId: 'c1', otraCanchaId: OTHER_A },
+          { canchaId: OTHER_A, otraCanchaId: 'c1' },
+          { canchaId: 'c1', otraCanchaId: OTHER_B },
+          { canchaId: OTHER_B, otraCanchaId: 'c1' },
+        ],
+      })
+    })
+
+    it('an empty list removes the links in both directions', async () => {
+      const { service, prisma } = makeService()
+      prisma.cancha.findUnique.mockResolvedValue({ id: 'c1', ownerId: 'owner1' })
+
+      await service.update('owner1', 'c1', { comparteCon: [] })
+
+      expect(prisma.canchaConflicto.deleteMany).toHaveBeenCalled()
+      expect(prisma.canchaConflicto.createMany).not.toHaveBeenCalled()
+    })
+
+    it('leaves the links alone when the request does not mention them', async () => {
+      const { service, prisma } = makeService()
+      prisma.cancha.findUnique.mockResolvedValue({ id: 'c1', ownerId: 'owner1' })
+
+      await service.update('owner1', 'c1', { nombre: 'Otro nombre' })
+
+      expect(prisma.canchaConflicto.deleteMany).not.toHaveBeenCalled()
+      expect(prisma.canchaConflicto.createMany).not.toHaveBeenCalled()
+      expect(prisma.cancha.update).toHaveBeenCalledWith({
+        where: { id: 'c1' },
+        data: { nombre: 'Otro nombre' },
+      })
+    })
+
+    it('only lets me link courts of mine', async () => {
+      const { service, prisma } = makeService()
+      prisma.cancha.findUnique.mockResolvedValue({ id: 'c1', ownerId: 'owner1' })
+      prisma.cancha.count.mockResolvedValue(1) // one of the two is somebody else's
+
+      await expect(
+        service.update('owner1', 'c1', { comparteCon: [OTHER_A, OTHER_B] })
+      ).rejects.toBeInstanceOf(BadRequestException)
+      expect(prisma.canchaConflicto.createMany).not.toHaveBeenCalled()
+    })
+
+    it('does not link a court with itself', async () => {
+      const { service, prisma } = makeService()
+      prisma.cancha.findUnique.mockResolvedValue({ id: 'c1', ownerId: 'owner1' })
+
+      await expect(service.update('owner1', 'c1', { comparteCon: ['c1'] })).rejects.toBeInstanceOf(
+        BadRequestException
+      )
+    })
+
+    it('links a new court with the ones given when it is created', async () => {
+      const { service, prisma } = makeService()
+      prisma.cancha.count.mockResolvedValue(1)
+
+      await service.create('owner1', { ...dto, comparteCon: [OTHER_A] })
+
+      expect(prisma.cancha.create).toHaveBeenCalledWith({ data: { ...dto, ownerId: 'owner1' } })
+      expect(prisma.canchaConflicto.createMany).toHaveBeenCalledWith({
+        data: [
+          { canchaId: 'c1', otraCanchaId: OTHER_A },
+          { canchaId: OTHER_A, otraCanchaId: 'c1' },
+        ],
+      })
+    })
+
+    it("someone else's court cannot be linked or edited by me", async () => {
+      const { service, prisma } = makeService()
+      prisma.cancha.findUnique.mockResolvedValue({ id: 'c1', ownerId: 'someone-else' })
+
+      await expect(
+        service.update('owner1', 'c1', { comparteCon: [OTHER_A] })
+      ).rejects.toBeInstanceOf(ForbiddenException)
+      expect(prisma.canchaConflicto.createMany).not.toHaveBeenCalled()
     })
   })
 

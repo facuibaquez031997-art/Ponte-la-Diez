@@ -1,9 +1,12 @@
 import {
+  ArrayMaxSize,
+  IsArray,
   IsIn,
   IsInt,
   IsNumber,
   IsPositive,
   IsString,
+  IsUUID,
   Max,
   MaxLength,
   Min,
@@ -45,6 +48,16 @@ export class CreateCanchaDto {
   @Min(1)
   @Max(MAX_CANTIDAD, { message: `cantidad no puede superar ${MAX_CANTIDAD}` })
   cantidad?: number
+
+  /**
+   * The other entries of the owner that use the same physical space (one court of 11 divided into
+   * 3 of 5): booking one blocks the others at that hour. Left out, the links do not change.
+   */
+  @ValidateIf((_, value) => value !== undefined)
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsUUID('all', { each: true })
+  comparteCon?: string[]
 
   @IsNumber()
   @IsPositive()

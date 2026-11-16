@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -18,6 +19,9 @@ const FOTOS_INCLUDE = {
 
 export type CanchaWithFotos = Prisma.CanchaGetPayload<{ include: typeof FOTOS_INCLUDE }>
 
+/** A court of the owner, with the other entries of the owner that share its physical space. */
+export type CanchaMine = CanchaWithFotos & { comparteCon: string[] }
+
 @Injectable()
 export class CanchasService {
   constructor(
@@ -26,15 +30,26 @@ export class CanchasService {
   ) {}
 
   create(ownerId: string, dto: CreateCanchaDto): Promise<Cancha> {
-    return this.prisma.cancha.create({ data: { ...dto, ownerId } })
+    const { comparteCon, ...data } = dto
+    if (comparteCon === undefined) return this.prisma.cancha.create({ data: { ...data, ownerId } })
+
+    return this.prisma.$transaction(async (tx) => {
+      const cancha = await tx.cancha.create({ data: { ...data, ownerId } })
+      await this.replaceLinks(tx, ownerId, cancha.id, comparteCon)
+      return cancha
+    })
   }
 
-  listMine(ownerId: string): Promise<CanchaWithFotos[]> {
-    return this.prisma.cancha.findMany({
+  async listMine(ownerId: string): Promise<CanchaMine[]> {
+    const canchas = await this.prisma.cancha.findMany({
       where: { ownerId },
       orderBy: { nombre: 'asc' },
-      include: FOTOS_INCLUDE,
+      include: { ...FOTOS_INCLUDE, comparteCon: { select: { otraCanchaId: true } } },
     })
+    return canchas.map(({ comparteCon, ...cancha }) => ({
+      ...cancha,
+      comparteCon: comparteCon.map((link) => link.otraCanchaId),
+    }))
   }
 
   list(filters: ListCanchasQuery): Promise<CanchaWithFotos[]> {
@@ -61,7 +76,46 @@ export class CanchasService {
 
   async update(ownerId: string, id: string, dto: UpdateCanchaDto): Promise<Cancha> {
     await this.assertOwner(ownerId, id)
-    return this.prisma.cancha.update({ where: { id }, data: dto })
+    const { comparteCon, ...data } = dto
+    if (comparteCon === undefined) return this.prisma.cancha.update({ where: { id }, data })
+
+    return this.prisma.$transaction(async (tx) => {
+      const cancha = await tx.cancha.update({ where: { id }, data })
+      await this.replaceLinks(tx, ownerId, id, comparteCon)
+      return cancha
+    })
+  }
+
+  /**
+   * Sets which other entries of the owner share the physical space of this one. The link is the
+   * same from both sides, so it is stored both ways: booking either blocks the other.
+   */
+  private async replaceLinks(
+    tx: Prisma.TransactionClient,
+    ownerId: string,
+    canchaId: string,
+    otherIds: string[]
+  ): Promise<void> {
+    const others = [...new Set(otherIds)]
+    if (others.includes(canchaId)) {
+      throw new BadRequestException('Una cancha no puede compartir el espacio consigo misma')
+    }
+    const own = await tx.cancha.count({ where: { id: { in: others }, ownerId } })
+    if (own !== others.length) {
+      throw new BadRequestException('Solo podés vincular canchas tuyas')
+    }
+
+    await tx.canchaConflicto.deleteMany({
+      where: { OR: [{ canchaId }, { otraCanchaId: canchaId }] },
+    })
+    if (others.length > 0) {
+      await tx.canchaConflicto.createMany({
+        data: others.flatMap((other) => [
+          { canchaId, otraCanchaId: other },
+          { canchaId: other, otraCanchaId: canchaId },
+        ]),
+      })
+    }
   }
 
   async remove(ownerId: string, id: string): Promise<void> {

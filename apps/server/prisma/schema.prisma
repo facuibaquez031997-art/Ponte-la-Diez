@@ -109,6 +109,20 @@ model Cancha {
   convocatorias  Convocatoria[]
   historial      HistorialReserva[]
   conversaciones Conversacion[]
+  // The entries that use the same physical space as this one (booking one blocks the other at
+  // that hour). Stored in both directions, so each entry finds its own links.
+  comparteCon    CanchaConflicto[]  @relation("CanchaConflictos")
+  comparteDe     CanchaConflicto[]  @relation("CanchaConflictosDe")
+}
+
+model CanchaConflicto {
+  canchaId     String
+  cancha       Cancha @relation("CanchaConflictos", fields: [canchaId], references: [id], onDelete: Cascade)
+  otraCanchaId String
+  otraCancha   Cancha @relation("CanchaConflictosDe", fields: [otraCanchaId], references: [id], onDelete: Cascade)
+
+  @@id([canchaId, otraCanchaId])
+  @@index([otraCanchaId])
 }
 
 model CanchaFoto {

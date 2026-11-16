@@ -1,10 +1,13 @@
 import {
+  ArrayMaxSize,
+  IsArray,
   IsIn,
   IsInt,
   IsNumber,
   IsOptional,
   IsPositive,
   IsString,
+  IsUUID,
   Max,
   MaxLength,
   Min,
@@ -45,6 +48,13 @@ export class UpdateCanchaDto {
   @Min(1)
   @Max(MAX_CANTIDAD, { message: `cantidad no puede superar ${MAX_CANTIDAD}` })
   cantidad?: number
+
+  /** The other entries of the owner that use the same physical space. Left out, nothing changes. */
+  @ValidateIf((_, value) => value !== undefined)
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsUUID('all', { each: true })
+  comparteCon?: string[]
 
   @IsOptional()
   @IsNumber()

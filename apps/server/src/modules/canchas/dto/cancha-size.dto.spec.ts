@@ -53,6 +53,34 @@ describe('size of the court (players per side)', () => {
     })
   })
 
+  describe('the entries that share the physical space', () => {
+    const id = '8f0c1f7e-3b9e-4c55-9d4b-0d6a5a3a9f11'
+    const other = '3a1f6d52-7c41-4a7e-8b0e-5d2c1e9f4a22'
+
+    it('is optional: leaving it out changes nothing', () => {
+      expect(create({ ...valid, jugadores: 5 })).toHaveLength(0)
+      expect(update({ nombre: 'Otro nombre' })).toHaveLength(0)
+    })
+
+    it('accepts a list of ids, or an empty list to remove the links', () => {
+      expect(create({ ...valid, jugadores: 5, comparteCon: [id, other] })).toHaveLength(0)
+      expect(update({ comparteCon: [id] })).toHaveLength(0)
+      expect(update({ comparteCon: [] })).toHaveLength(0)
+    })
+
+    it.each([['nope'], [[id, 'nope']], [[1]], [null], ['8f0c1f7e-3b9e-4c55-9d4b-0d6a5a3a9f11']])(
+      'refuses %j',
+      (comparteCon) => {
+        expect(create({ ...valid, jugadores: 5, comparteCon })).not.toHaveLength(0)
+        expect(update({ comparteCon })).not.toHaveLength(0)
+      }
+    )
+
+    it('refuses an absurd number of links', () => {
+      expect(update({ comparteCon: Array.from({ length: 21 }, () => id) })).not.toHaveLength(0)
+    })
+  })
+
   describe('editing a court', () => {
     it('does not require the size, so the other fields can change alone', () => {
       expect(update({ nombre: 'Otro nombre' })).toHaveLength(0)

@@ -16,7 +16,7 @@ import type { AuthUser } from '../auth/auth.types.js'
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js'
 import { Roles } from '../auth/decorators/roles.decorator.js'
 import { CanchaFotosService, type CanchaFotoView } from './cancha-fotos.service.js'
-import { type CanchaWithFotos, CanchasService } from './canchas.service.js'
+import { type CanchaMine, type CanchaWithFotos, CanchasService } from './canchas.service.js'
 import { ConfirmFotoDto } from './dto/confirm-foto.dto.js'
 import { CreateCanchaDto } from './dto/create-cancha.dto.js'
 import type { FotoUploadSignatureDto } from './dto/foto-upload-signature.dto.js'
@@ -42,7 +42,7 @@ export class CanchasController {
 
   @Get('mine')
   @Roles('OWNER')
-  listMine(@CurrentUser() user: AuthUser): Promise<CanchaWithFotos[]> {
+  listMine(@CurrentUser() user: AuthUser): Promise<CanchaMine[]> {
     return this.canchas.listMine(user.id)
   }
 
