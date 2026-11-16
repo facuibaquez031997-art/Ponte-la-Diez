@@ -10,6 +10,7 @@ import type {
   EstadoDevolucion,
   MotivoCierre,
   Pago,
+  Prisma,
   Reserva,
   ReservaState,
   Turno,
@@ -178,15 +179,12 @@ export class ReservasService {
     await releaseExpiredHolds(this.prisma, now, { canchaId: turno.canchaId })
 
     const reserva = await this.prisma.$transaction(async (tx) => {
-      const claimed = await tx.turno.updateMany({
-        where: { id: turno.id, estado: 'FREE' },
-        data: { estado: 'RESERVED' },
-      })
-      if (claimed.count === 0) throw new ConflictException('El turno ya fue reservado')
+      const turnoId = await this.claimSlot(tx, turno)
+      if (!turnoId) throw new ConflictException('El turno ya fue reservado')
 
       return tx.reserva.create({
         data: {
-          turnoId: turno.id,
+          turnoId,
           userId,
           montoTotal: turno.cancha.precioHora,
           pago: { create: { monto, estadoPago: 'PENDING' } },
@@ -195,6 +193,42 @@ export class ReservasService {
       })
     })
     return toView(reserva)
+  }
+
+  /**
+   * Takes the slot the player chose, or, when somebody took it a moment ago, another court of the
+   * same entry at the same hour (an entry with two courts has two slots per hour). Every try is a
+   * single conditional update, so two players racing never get the same slot. Returns the id of
+   * the slot taken, or null when the hour has no free court left.
+   */
+  private async claimSlot(
+    tx: Prisma.TransactionClient,
+    turno: Pick<Turno, 'id' | 'canchaId' | 'fechaHoraInicio'>
+  ): Promise<string | null> {
+    const take = async (id: string): Promise<boolean> => {
+      const claimed = await tx.turno.updateMany({
+        where: { id, estado: 'FREE' },
+        data: { estado: 'RESERVED' },
+      })
+      return claimed.count === 1
+    }
+
+    if (await take(turno.id)) return turno.id
+
+    const others = await tx.turno.findMany({
+      where: {
+        canchaId: turno.canchaId,
+        fechaHoraInicio: turno.fechaHoraInicio,
+        estado: 'FREE',
+        id: { not: turno.id },
+      },
+      orderBy: { numero: 'asc' },
+      select: { id: true },
+    })
+    for (const other of others) {
+      if (await take(other.id)) return other.id
+    }
+    return null
   }
 
   async listMine(userId: string, now: Date = new Date()): Promise<ReservaView[]> {

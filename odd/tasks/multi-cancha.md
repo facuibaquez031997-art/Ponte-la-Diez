@@ -11,7 +11,7 @@ Branch: feat/multi-cancha (from feat/tamano-cancha, because it builds on the siz
 
 - [ ] T1 S1 · inline · client: the chat button of the court card sends the ready message when a slot is chosen · commit: see git log "ready message" (tsc, eslint, vite build clean)
 - [ ] T2 S2 · inline · server: `Cancha.cantidad`, `Turno.numero` and its unique key + migration, DTOs, slot generation per quantity, tests · commit: see git log "several courts" (server suite 442 green, tsc clean; found and fixed null passing @IsOptional)
-- [ ] T3 S2 · inline · server: booking takes any free court of the hour, chat offer availability by court and hour, agenda answer with the number of the court, tests · commit: -
+- [ ] T3 S2 · inline · server: booking takes any free court of the hour, chat offer availability by court and hour, agenda answer with the number of the court, tests · commit: see git log "books any free court of the hour" (server suite 451 green, tsc clean)
 - [ ] T4 S2 · inline · client: quantity in the court form and card, one chip per hour with the free count, agenda and offer wording · commit: -
 - [ ] T5 · inline · live check against the real database (including two players racing for the last court of an hour), docs and pending list · commit: -
 

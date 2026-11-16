@@ -36,12 +36,21 @@ export interface AgendaTurno {
   id: string
   fechaHoraInicio: Date
   fechaHoraFin: Date
+  /** Which court of the entry this slot is (1 to cantidad). */
+  numero: number
   estado: TurnoState
   reserva: AgendaReserva | null
 }
 
 export interface AgendaCancha {
-  cancha: { id: string; nombre: string; tipoSuperficie: string; jugadores: number | null }
+  cancha: {
+    id: string
+    nombre: string
+    tipoSuperficie: string
+    jugadores: number | null
+    /** How many courts of this size the entry has: that many slots per hour. */
+    cantidad: number
+  }
   turnos: AgendaTurno[]
 }
 
@@ -119,7 +128,7 @@ export class TurnosService {
     await releaseExpiredHolds(this.prisma, now, { ownerId })
     const canchas = await this.prisma.cancha.findMany({
       where: { ownerId },
-      select: { id: true, nombre: true, tipoSuperficie: true, jugadores: true },
+      select: { id: true, nombre: true, tipoSuperficie: true, jugadores: true, cantidad: true },
       orderBy: { nombre: 'asc' },
     })
     await Promise.all(canchas.map((cancha) => this.sync(cancha.id, now)))
@@ -132,7 +141,7 @@ export class TurnosService {
               canchaId: { in: canchas.map((cancha) => cancha.id) },
               fechaHoraInicio: { gte: day.start, lt: day.end },
             },
-            orderBy: { fechaHoraInicio: 'asc' },
+            orderBy: [{ fechaHoraInicio: 'asc' }, { numero: 'asc' }],
             include: {
               reserva: {
                 select: {
@@ -159,6 +168,7 @@ export class TurnosService {
             id: turno.id,
             fechaHoraInicio: turno.fechaHoraInicio,
             fechaHoraFin: turno.fechaHoraFin,
+            numero: turno.numero,
             estado: turno.estado,
             reserva: turno.reserva ? this.toAgendaReserva(turno.reserva) : null,
           })),

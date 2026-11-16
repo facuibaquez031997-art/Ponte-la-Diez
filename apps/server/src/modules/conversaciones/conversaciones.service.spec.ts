@@ -114,13 +114,23 @@ const makePrisma = (reservas: Record<string, Reserva> = {}) => {
         const slot = turnos[args.where.id]
         return slot ? { ...slot, cancha: { ownerId: COURTS[slot.canchaId]?.ownerId } } : null
       }),
-      findMany: vi.fn(async (args: { where: { id: { in: string[] }; estado: string } }) =>
-        args.where.id.in
-          .filter((id) => {
-            const slot = turnos[id]
-            return slot && slot.estado === args.where.estado && slot.fechaHoraInicio > new Date()
-          })
-          .map((id) => ({ id }))
+      // Free slots of the courts and hours of the offers (one per court of the entry).
+      findMany: vi.fn(
+        async (args: {
+          where: { estado: string; OR: { canchaId: string; fechaHoraInicio: Date }[] }
+        }) =>
+          Object.values(turnos)
+            .filter(
+              (slot) =>
+                slot.estado === args.where.estado &&
+                slot.fechaHoraInicio > new Date() &&
+                args.where.OR.some(
+                  (wanted) =>
+                    wanted.canchaId === slot.canchaId &&
+                    wanted.fechaHoraInicio.getTime() === slot.fechaHoraInicio.getTime()
+                )
+            )
+            .map((slot) => ({ canchaId: slot.canchaId, fechaHoraInicio: slot.fechaHoraInicio }))
       ),
     },
     reserva: {
@@ -699,6 +709,44 @@ describe('ConversacionesService', () => {
 
       const offer = (await service.thread(PLAYER, id)).mensajes.at(-1)?.oferta
       expect(offer).toMatchObject({ turnoId: 't-free', fechaHoraInicio: TURNO, disponible: false })
+    })
+
+    it('keeps the offer bookable while another court of that hour is still free', async () => {
+      const { prisma, service } = setup()
+      // The entry has two courts: a second slot at the same hour.
+      prisma.turnos['t-free-2'] = { canchaId: CANCHA, estado: 'FREE', fechaHoraInicio: TURNO }
+      const id = await openChat(service)
+      advance(5)
+      await service.send(OWNER, id, 'Tengo el sábado a las 17', 't-free')
+
+      // A player books the offered court: the other one of the hour is still there.
+      prisma.turnos['t-free'].estado = 'RESERVED'
+      expect((await service.thread(PLAYER, id)).mensajes.at(-1)?.oferta?.disponible).toBe(true)
+
+      // Now the last court of that hour goes too.
+      prisma.turnos['t-free-2'].estado = 'RESERVED'
+      expect((await service.thread(PLAYER, id)).mensajes.at(-1)?.oferta?.disponible).toBe(false)
+    })
+
+    it('does not mix hours or courts: another hour or another court being free is not enough', async () => {
+      const { prisma, service } = setup()
+      prisma.turnos['otra-hora'] = {
+        canchaId: CANCHA,
+        estado: 'FREE',
+        fechaHoraInicio: new Date(TURNO.getTime() + 3_600_000),
+      }
+      prisma.turnos['otro-lugar'] = {
+        canchaId: 'cancha-7',
+        estado: 'FREE',
+        fechaHoraInicio: TURNO,
+      }
+      const id = await openChat(service)
+      advance(5)
+      await service.send(OWNER, id, 'Tengo el sábado a las 17', 't-free')
+
+      prisma.turnos['t-free'].estado = 'RESERVED'
+
+      expect((await service.thread(PLAYER, id)).mensajes.at(-1)?.oferta?.disponible).toBe(false)
     })
 
     it('keeps the offer, not bookable, when the slot left the schedule and was deleted', async () => {

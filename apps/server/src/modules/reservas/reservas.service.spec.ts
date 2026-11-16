@@ -40,6 +40,8 @@ const makePrisma = () => {
   const prisma = {
     turno: {
       findUnique: vi.fn(async (_args?: object) => turno() as unknown),
+      // The other courts of the same hour, looked up only when the chosen slot was just taken.
+      findMany: vi.fn(async (_args?: object) => [] as { id: string }[]),
       updateMany: vi.fn(async (_args?: object) => ({ count: 1 })),
       update: vi.fn(async (_args?: object) => ({})),
     },
@@ -133,6 +135,82 @@ describe('ReservasService.create', () => {
       )
     ).rejects.toBeInstanceOf(ConflictException)
     expect(prisma.reserva.create).not.toHaveBeenCalled()
+  })
+
+  describe('an entry with several courts has several slots at the same hour', () => {
+    const book = (prisma: ReturnType<typeof makePrisma>) =>
+      new ReservasService(prisma as never, makeNotifications() as never).create(
+        'u1',
+        { turnoId: 't1', tipoPago: 'SENA' },
+        now
+      )
+
+    it('does not look for another court when the chosen one is free', async () => {
+      const prisma = makePrisma()
+      await book(prisma)
+      expect(prisma.turno.findMany).not.toHaveBeenCalled()
+      expect(createArgs(prisma).turnoId).toBe('t1')
+    })
+
+    it('books another free court of the same hour when the chosen one was just taken', async () => {
+      const prisma = makePrisma()
+      prisma.turno.updateMany.mockResolvedValueOnce({ count: 0 })
+      prisma.turno.findMany.mockResolvedValue([{ id: 't2' }])
+
+      await book(prisma)
+
+      expect(prisma.turno.findMany).toHaveBeenCalledWith({
+        where: {
+          canchaId: 'c1',
+          fechaHoraInicio: future,
+          estado: 'FREE',
+          id: { not: 't1' },
+        },
+        orderBy: { numero: 'asc' },
+        select: { id: true },
+      })
+      expect(prisma.turno.updateMany).toHaveBeenLastCalledWith({
+        where: { id: 't2', estado: 'FREE' },
+        data: { estado: 'RESERVED' },
+      })
+      expect(createArgs(prisma).turnoId).toBe('t2')
+    })
+
+    it('goes on to the next court when another player takes the one it tried first', async () => {
+      const prisma = makePrisma()
+      prisma.turno.updateMany
+        .mockResolvedValueOnce({ count: 0 }) // the chosen one
+        .mockResolvedValueOnce({ count: 0 }) // t2, taken by somebody else in between
+        .mockResolvedValueOnce({ count: 1 }) // t3
+      prisma.turno.findMany.mockResolvedValue([{ id: 't2' }, { id: 't3' }])
+
+      await book(prisma)
+
+      expect(createArgs(prisma).turnoId).toBe('t3')
+    })
+
+    it('answers 409 only when no court is left at that hour, and books nothing', async () => {
+      const prisma = makePrisma()
+      prisma.turno.updateMany.mockResolvedValue({ count: 0 })
+      prisma.turno.findMany.mockResolvedValue([{ id: 't2' }, { id: 't3' }])
+
+      await expect(book(prisma)).rejects.toBeInstanceOf(ConflictException)
+
+      expect(prisma.turno.updateMany).toHaveBeenCalledTimes(3)
+      expect(prisma.reserva.create).not.toHaveBeenCalled()
+    })
+
+    it('charges the price of the court, whichever of its slots was taken', async () => {
+      const prisma = makePrisma()
+      prisma.turno.updateMany.mockResolvedValueOnce({ count: 0 })
+      prisma.turno.findMany.mockResolvedValue([{ id: 't2' }])
+
+      await book(prisma)
+
+      const data = createArgs(prisma)
+      expect(data.montoTotal).toBe(20000)
+      expect(data.pago).toEqual({ create: { monto: 5000, estadoPago: 'PENDING' } })
+    })
   })
 
   it('answers 404 for an unknown slot', async () => {

@@ -126,6 +126,9 @@ export interface OfertaView {
   }
 }
 
+/** A court at an hour, whichever of its slots (one per court of the entry) is meant. */
+const hourKey = (canchaId: string, start: Date): string => `${canchaId}#${start.getTime()}`
+
 const toOfertaCancha = (court: {
   id: string
   nombre: string
@@ -424,19 +427,24 @@ export class ConversacionesService {
       for (const court of found) courts.set(court.id, toOfertaCancha(court))
     }
 
+    // An offer is about a court and an hour: it stays bookable while any court of that hour is
+    // free (an entry with two courts has two slots at the same hour).
     let free = new Set<string>()
     const upcoming = offered.filter((row) => row.ofertaInicio > now)
     if (upcoming.length > 0) {
       await releaseExpiredHolds(this.prisma, now, { ownerId: cancha.ownerId })
       const turnos = await this.prisma.turno.findMany({
         where: {
-          id: { in: upcoming.map((row) => row.ofertaTurnoId) },
           estado: 'FREE',
           fechaHoraInicio: { gt: now },
+          OR: upcoming.map((row) => ({
+            canchaId: row.ofertaCanchaId ?? cancha.id,
+            fechaHoraInicio: row.ofertaInicio,
+          })),
         },
-        select: { id: true },
+        select: { canchaId: true, fechaHoraInicio: true },
       })
-      free = new Set(turnos.map((turno) => turno.id))
+      free = new Set(turnos.map((turno) => hourKey(turno.canchaId, turno.fechaHoraInicio)))
     }
 
     return rows.map((row) => {
@@ -451,7 +459,7 @@ export class ConversacionesService {
             ? {
                 turnoId: row.ofertaTurnoId,
                 fechaHoraInicio: row.ofertaInicio,
-                disponible: free.has(row.ofertaTurnoId),
+                disponible: free.has(hourKey(row.ofertaCanchaId ?? cancha.id, row.ofertaInicio)),
                 cancha: court,
               }
             : null,

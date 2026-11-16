@@ -5,8 +5,8 @@ import { TurnosService } from './turnos.service.js'
 
 const now = new Date('2026-11-09T15:00:00.000Z') // Mon 12:00 local
 const canchas = [
-  { id: 'c1', nombre: 'El Mate', tipoSuperficie: 'Sintético', jugadores: 5 },
-  { id: 'c2', nombre: 'La Bombonera', tipoSuperficie: 'Cemento', jugadores: null },
+  { id: 'c1', nombre: 'El Mate', tipoSuperficie: 'Sintético', jugadores: 5, cantidad: 2 },
+  { id: 'c2', nombre: 'La Bombonera', tipoSuperficie: 'Cemento', jugadores: null, cantidad: 1 },
 ]
 
 const turno = (
@@ -14,12 +14,14 @@ const turno = (
   canchaId: string,
   iso: string,
   estado = 'FREE',
-  reserva: object | null = null
+  reserva: object | null = null,
+  numero = 1
 ) => ({
   id,
   canchaId,
   fechaHoraInicio: new Date(iso),
   fechaHoraFin: new Date(new Date(iso).getTime() + 3_600_000),
+  numero,
   estado,
   reserva,
 })
@@ -196,9 +198,40 @@ describe('TurnosService.agenda', () => {
     ])
     expect(prisma.cancha.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        select: { id: true, nombre: true, tipoSuperficie: true, jugadores: true },
+        select: { id: true, nombre: true, tipoSuperficie: true, jugadores: true, cantidad: true },
       })
     )
+  })
+
+  it('brings how many courts every entry has', async () => {
+    const { service } = makeService()
+
+    const view = await service.agenda('o1', '2026-11-10', now)
+
+    expect(view.canchas.map((c) => [c.cancha.nombre, c.cancha.cantidad])).toEqual([
+      ['El Mate', 2],
+      ['La Bombonera', 1],
+    ])
+  })
+
+  it('shows each court of the same hour as its own slot, in order, one booked and one free', async () => {
+    const { prisma, service } = makeService()
+    prisma.turno.findMany.mockResolvedValue([
+      turno('a1', 'c1', '2026-11-10T21:00:00.000Z', 'RESERVED', booking(), 1),
+      turno('a2', 'c1', '2026-11-10T21:00:00.000Z', 'FREE', null, 2),
+    ])
+
+    const { turnos } = (await service.agenda('o1', '2026-11-10', now)).canchas[0]
+
+    expect(turnos.map((t) => [t.numero, t.estado])).toEqual([
+      [1, 'RESERVED'],
+      [2, 'FREE'],
+    ])
+    expect(turnos[0].reserva?.jugador.nombre).toBe('Ana')
+    expect(turnos[1].reserva).toBeNull()
+    const call = prisma.turno.findMany.mock.calls[0][0] as { orderBy: unknown }
+    // By hour, and within one hour by the number of the court.
+    expect(call.orderBy).toEqual([{ fechaHoraInicio: 'asc' }, { numero: 'asc' }])
   })
 
   it('answers with an empty list when the owner has no courts, without reading slots', async () => {
