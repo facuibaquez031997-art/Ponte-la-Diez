@@ -289,6 +289,16 @@ describe('ReservasService.create', () => {
       expect(createArgs(prisma).turnoId).toBe('t1')
     })
 
+    it('frees the expired bookings of the whole owner first, so an expired one of a linked entry does not block', async () => {
+      const prisma = makePrisma()
+
+      await book(prisma)
+
+      const release = prisma.reserva.findMany.mock.calls[0][0] as { where: Record<string, unknown> }
+      expect(release.where.estado).toBe('PENDING')
+      expect(release.where.turno).toEqual({ cancha: { ownerId: 'o1' } })
+    })
+
     it('an entry that shares nothing is not slowed down by looking for reservations', async () => {
       const prisma = makePrisma()
 

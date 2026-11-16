@@ -11,7 +11,9 @@ const HOUR = 3_600_000
 const mondaySchedule = [{ diaSemana: 1, minutoInicio: 1020, minutoFin: 1200 }]
 
 const makePrisma = () => ({
-  cancha: { findUnique: vi.fn(async (_args?: object) => ({ id: 'c1' }) as unknown) },
+  cancha: {
+    findUnique: vi.fn(async (_args?: object) => ({ id: 'c1', ownerId: 'o1' }) as unknown),
+  },
   horarioCancha: { findMany: vi.fn(async (_args?: object) => mondaySchedule as unknown[]) },
   reserva: { findMany: vi.fn(async (_args?: object) => [] as unknown[]) },
   // Entries that share the physical space with the one asked about: none unless a test adds them.
@@ -270,7 +272,8 @@ describe('TurnosService.listFree', () => {
     const where = (prisma.reserva.findMany.mock.calls[0][0] as { where: Record<string, unknown> })
       .where
     expect(where.estado).toBe('PENDING')
-    expect(where.turno).toEqual({ canchaId: 'c1' })
+    // Of the whole owner: an expired booking of a linked entry would keep this one blocked.
+    expect(where.turno).toEqual({ cancha: { ownerId: 'o1' } })
     expect(prisma.reserva.findMany.mock.invocationCallOrder[0]).toBeLessThan(
       prisma.horarioCancha.findMany.mock.invocationCallOrder[0]
     )

@@ -29,7 +29,8 @@ const OwnerAgendaPage = () => {
 
   const visible = agenda?.canchas.filter((item) => !canchaId || item.cancha.id === canchaId) ?? []
   const turnos = visible.flatMap((item) => item.turnos)
-  const free = turnos.filter((turno) => turno.estado === 'FREE').length
+  const blocked = turnos.filter((turno) => turno.estado === 'FREE' && turno.bloqueadaPor).length
+  const free = turnos.filter((turno) => turno.estado === 'FREE').length - blocked
   const waiting = turnos.filter((turno) => turno.reserva?.estado === 'PENDING').length
   const booked = turnos.filter((turno) => turno.estado === 'RESERVED').length - waiting
 
@@ -69,6 +70,7 @@ const OwnerAgendaPage = () => {
           <p className="text-sm font-semibold text-on-surface" aria-live="polite">
             {free} {free === 1 ? 'turno libre' : 'turnos libres'} · {booked}{' '}
             {booked === 1 ? 'reservado' : 'reservados'} · {waiting} esperando pago
+            {blocked > 0 && ` · ${blocked} ${blocked === 1 ? 'bloqueado' : 'bloqueados'}`}
           </p>
         )}
       </section>

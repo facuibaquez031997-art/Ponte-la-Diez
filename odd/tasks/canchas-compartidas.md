@@ -12,7 +12,7 @@ Branch: feat/canchas-compartidas (from feat/multi-cancha, because it builds on t
 
 - [ ] T1 S2 · inline · server: table of links between entries + migration, `comparteCon` when creating/editing a court (only the owner's own entries), returned in the owner's list, the helper that finds the blocked slots, tests · commit: see git log "entries that share the space" (server suite 477 green, tsc clean)
 - [ ] T2 S1 S3 S4 · inline · server: booking checks the links under a lock per owner and hour, the public free list hides blocked slots, chat offers are validated and checked live against the links, the agenda marks blocked slots, tests · commit: see git log "booking blocks the linked entries" (server suite 493 green, tsc clean)
-- [ ] T3 S2 S3 · inline · client: "Comparte el espacio con" in the court form, blocked slots in the agenda (not offerable), owner court card · commit: -
+- [ ] T3 S2 S3 · inline · client: "Comparte el espacio con" in the court form, blocked slots in the agenda (not offerable), owner court card · commit: see git log "shared space in the client" (tsc, eslint, vite build clean)
 - [ ] T4 · inline · live check against the real database (the 11 and the 3 of 5, including the two linked entries booked at the same moment), docs and pending list · commit: -
 
 ## Log

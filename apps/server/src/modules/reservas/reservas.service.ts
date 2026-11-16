@@ -177,7 +177,9 @@ export class ReservasService {
     const monto = dto.tipoPago === 'SENA' ? turno.cancha.montoSena : turno.cancha.precioHora
     if (!(monto > 0)) throw new BadRequestException('El monto a pagar debe ser mayor a cero')
 
-    await releaseExpiredHolds(this.prisma, now, { canchaId: turno.canchaId })
+    // The whole owner, not only this court: an unpaid booking that expired in an entry that shares
+    // the space would keep this slot blocked.
+    await releaseExpiredHolds(this.prisma, now, { ownerId: turno.cancha.ownerId })
 
     const reserva = await this.prisma.$transaction(async (tx) => {
       // Entries that share the physical space are checked together. One lock per owner and hour

@@ -14,6 +14,8 @@ interface CanchaCardProps {
   cancha: Cancha
   // undefined while the schedule is still loading
   horarios?: Franja[]
+  // Names of the other entries that use the same physical space as this one.
+  comparteConNombres?: string[]
   onEdit: (cancha: Cancha) => void
   onDelete: (cancha: Cancha) => void
   onPhotosChanged: () => Promise<void>
@@ -23,6 +25,7 @@ interface CanchaCardProps {
 const CanchaCard = ({
   cancha,
   horarios,
+  comparteConNombres = [],
   onEdit,
   onDelete,
   onPhotosChanged,
@@ -38,6 +41,15 @@ const CanchaCard = ({
       <p className="text-sm text-on-surface-variant">
         {cancha.tipoSuperficie} · {cancha.barrio}
       </p>
+      {comparteConNombres.length > 0 && (
+        <p className="flex items-center gap-1 text-xs text-on-surface-variant">
+          <span aria-hidden="true" className="material-symbols-outlined text-[16px] text-secondary">
+            link
+          </span>
+          Comparte el espacio con {comparteConNombres.join(', ')}: si se reserva una, las otras se
+          bloquean.
+        </p>
+      )}
       {cancha.jugadores ? (
         <p className="text-sm font-semibold text-secondary">
           {cancha.cantidad > 1

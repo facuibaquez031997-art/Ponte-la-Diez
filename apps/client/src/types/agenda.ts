@@ -23,6 +23,8 @@ export interface AgendaTurno {
   /** Which court of the entry this slot is (1 to cantidad). */
   numero: number
   estado: TurnoEstado
+  /** Name of the entry that holds the shared space when this free slot is blocked by it. */
+  bloqueadaPor: string | null
   reserva: AgendaReserva | null
 }
 

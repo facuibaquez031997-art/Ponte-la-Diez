@@ -16,6 +16,9 @@ interface AgendaDayProps {
 
 const slotChip = (turno: AgendaTurno): { label: string; className: string } => {
   const { reserva } = turno
+  if (turno.estado === 'FREE' && turno.bloqueadaPor) {
+    return { label: 'Bloqueada', className: 'bg-surface-variant text-on-surface-variant' }
+  }
   if (turno.estado === 'FREE') {
     return { label: 'Libre', className: 'bg-secondary-fixed text-on-secondary-container' }
   }
@@ -32,6 +35,13 @@ const slotChip = (turno: AgendaTurno): { label: string; className: string } => {
 
 const SlotDetail = ({ turno }: { turno: AgendaTurno }) => {
   const { reserva } = turno
+  if (turno.estado === 'FREE' && turno.bloqueadaPor) {
+    return (
+      <span className="text-sm text-on-surface-variant">
+        Se está usando el espacio: {turno.bloqueadaPor} está reservada a esta hora
+      </span>
+    )
+  }
   if (turno.estado === 'FREE') {
     return <span className="text-sm text-on-surface-variant">Disponible para reservar</span>
   }
@@ -89,7 +99,7 @@ const AgendaDay = ({ agenda, canchaId, onPickSlot, compact = false }: AgendaDayP
       )}
 
       {canchas.map(({ cancha, turnos }) => {
-        const free = turnos.filter((turno) => turno.estado === 'FREE').length
+        const free = turnos.filter((turno) => turno.estado === 'FREE' && !turno.bloqueadaPor).length
         const booked = turnos.filter((turno) => turno.estado === 'RESERVED').length
 
         return (
@@ -141,7 +151,7 @@ const AgendaDay = ({ agenda, canchaId, onPickSlot, compact = false }: AgendaDayP
                       <div className="min-w-0 flex-1">
                         <SlotDetail turno={turno} />
                       </div>
-                      {turno.estado === 'FREE' && onPickSlot && (
+                      {turno.estado === 'FREE' && !turno.bloqueadaPor && onPickSlot && (
                         <button
                           type="button"
                           onClick={() => onPickSlot(cancha, turno)}

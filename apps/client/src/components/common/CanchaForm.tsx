@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { getAuthErrorMessage } from '../../pages/Auth/authError'
 import { MAX_CANTIDAD, SURFACES, TAMANOS, type Cancha, type CanchaInput } from '../../types/canchas'
+import { formatJugadores } from '../../utils/canchas'
 import { MAX_MONEY, formatMoney, onlyDigits } from '../../utils/money'
 import BarrioCombobox from './BarrioCombobox'
 
@@ -10,11 +11,13 @@ const LABEL_CLASS = 'text-label-sm uppercase tracking-wider text-on-surface'
 
 interface CanchaFormProps {
   cancha?: Cancha
+  /** The other entries of the owner: the ones this court can share its physical space with. */
+  otras?: Cancha[]
   onSubmit: (input: CanchaInput) => Promise<void>
   onCancel: () => void
 }
 
-const CanchaForm = ({ cancha, onSubmit, onCancel }: CanchaFormProps) => {
+const CanchaForm = ({ cancha, otras = [], onSubmit, onCancel }: CanchaFormProps) => {
   const [nombre, setNombre] = useState(cancha?.nombre ?? '')
   const [direccion, setDireccion] = useState(cancha?.direccion ?? '')
   const [barrio, setBarrio] = useState(cancha?.barrio ?? '')
@@ -22,6 +25,7 @@ const CanchaForm = ({ cancha, onSubmit, onCancel }: CanchaFormProps) => {
   // "" until the owner chooses: a court cannot be saved without its size, not even an old one.
   const [jugadores, setJugadores] = useState(cancha?.jugadores ? String(cancha.jugadores) : '')
   const [cantidad, setCantidad] = useState(String(cancha?.cantidad ?? 1))
+  const [comparteCon, setComparteCon] = useState<string[]>(cancha?.comparteCon ?? [])
   const [precioHora, setPrecioHora] = useState(cancha ? String(cancha.precioHora) : '')
   const [montoSena, setMontoSena] = useState(cancha ? String(cancha.montoSena) : '')
   const [saving, setSaving] = useState(false)
@@ -39,6 +43,7 @@ const CanchaForm = ({ cancha, onSubmit, onCancel }: CanchaFormProps) => {
         tipoSuperficie,
         jugadores: Number(jugadores),
         cantidad: Number(cantidad),
+        comparteCon,
         precioHora: Number(precioHora),
         montoSena: Number(montoSena),
       })
@@ -200,6 +205,38 @@ const CanchaForm = ({ cancha, onSubmit, onCancel }: CanchaFormProps) => {
           />
         </div>
       </div>
+
+      {otras.length > 0 && (
+        <fieldset className="flex flex-col gap-2 rounded-2xl bg-surface-container-low p-4">
+          <legend className={LABEL_CLASS}>Comparte el espacio con</legend>
+          <p className="text-xs text-on-surface-variant">
+            Marcá las canchas que usan el mismo lugar físico. Cuando se reserva una, las otras se
+            bloquean en ese horario. Por ejemplo, una cancha de 11 que se divide en 3 de 5: en la de
+            11 marcá la de 5, y en la de 5 marcá la de 11.
+          </p>
+          {otras.map((otra) => (
+            <label key={otra.id} className="flex cursor-pointer items-center gap-3 text-sm">
+              <input
+                type="checkbox"
+                checked={comparteCon.includes(otra.id)}
+                onChange={(e) =>
+                  setComparteCon((current) =>
+                    e.target.checked
+                      ? [...current, otra.id]
+                      : current.filter((id) => id !== otra.id)
+                  )
+                }
+                className="h-4 w-4 cursor-pointer accent-secondary"
+              />
+              <span className="font-semibold text-on-surface">{otra.nombre}</span>
+              <span className="text-on-surface-variant">
+                {otra.jugadores ? formatJugadores(otra.jugadores) : 'sin tamaño'}
+                {otra.cantidad > 1 ? ` · ${otra.cantidad} canchas` : ''}
+              </span>
+            </label>
+          ))}
+        </fieldset>
+      )}
 
       {error && (
         <p

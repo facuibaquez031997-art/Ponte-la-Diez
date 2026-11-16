@@ -33,6 +33,8 @@ export interface Cancha {
   jugadores: number | null
   // How many courts of this size the owner has: that many slots exist at the same hour.
   cantidad: number
+  // Only in the owner's own list: the other entries that use the same physical space.
+  comparteCon?: string[]
   precioHora: number
   montoSena: number
   // Oldest first: the first photo is the cover.
@@ -57,8 +59,9 @@ export interface CanchaFilters {
 }
 
 // The size is required to save a court, even when the stored one has none yet.
-export type CanchaInput = Omit<Cancha, 'id' | 'ownerId' | 'fotos' | 'jugadores'> & {
+export type CanchaInput = Omit<Cancha, 'id' | 'ownerId' | 'fotos' | 'jugadores' | 'comparteCon'> & {
   jugadores: number
+  comparteCon?: string[]
 }
 
 // Day of the week as the API sends it: 0 = Sunday ... 6 = Saturday.

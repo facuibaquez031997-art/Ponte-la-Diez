@@ -220,7 +220,9 @@ export class TurnosService {
     const cancha = await this.prisma.cancha.findUnique({ where: { id: canchaId } })
     if (!cancha) throw new NotFoundException('La cancha no existe')
 
-    await releaseExpiredHolds(this.prisma, now, { canchaId })
+    // The whole owner, not only this court: an unpaid booking that expired in an entry that shares
+    // the space would keep this one blocked.
+    await releaseExpiredHolds(this.prisma, now, { ownerId: cancha.ownerId })
     await this.sync(canchaId, now)
 
     const from = day && day.start > now ? day.start : now

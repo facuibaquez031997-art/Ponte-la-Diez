@@ -110,6 +110,7 @@ const OwnerCanchasPage = () => {
         <CanchaForm
           key={form.kind === 'edit' ? form.cancha.id : 'new'}
           cancha={form.kind === 'edit' ? form.cancha : undefined}
+          otras={canchas.filter((item) => form.kind !== 'edit' || item.id !== form.cancha.id)}
           onSubmit={handleSubmit}
           onCancel={() => setForm(null)}
         />
@@ -124,6 +125,9 @@ const OwnerCanchasPage = () => {
               key={cancha.id}
               cancha={cancha}
               horarios={horarios[cancha.id]}
+              comparteConNombres={(cancha.comparteCon ?? []).flatMap(
+                (id) => canchas.find((item) => item.id === id)?.nombre ?? []
+              )}
               onEdit={(target) => startForm({ kind: 'edit', cancha: target })}
               onDelete={setDeleting}
               onPhotosChanged={load}
