@@ -18,6 +18,7 @@ import type {
 import { PrismaService } from '../../common/prisma/prisma.service.js'
 import { NotificationsService } from '../notifications/notifications.service.js'
 import type { CreateReservaDto } from './dto/create-reserva.dto.js'
+import { findBlocked } from '../turnos/conflicts.js'
 import { HOLD_MS, releaseExpiredHolds } from './holds.js'
 
 type StoredReserva = Pick<Reserva, 'id' | 'estado' | 'montoTotal'> & {
@@ -179,6 +180,20 @@ export class ReservasService {
     await releaseExpiredHolds(this.prisma, now, { canchaId: turno.canchaId })
 
     const reserva = await this.prisma.$transaction(async (tx) => {
+      // Entries that share the physical space are checked together. One lock per owner and hour
+      // makes two bookings of linked entries wait for each other, so the second one sees the
+      // first one's reservation and is refused instead of both going through.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${turno.cancha.ownerId}), hashtext(${turno.fechaHoraInicio.toISOString()}))`
+      const blocked = await findBlocked(tx, [turno.canchaId], {
+        gte: turno.fechaHoraInicio,
+        lte: turno.fechaHoraInicio,
+      })
+      if (blocked.size > 0) {
+        throw new ConflictException(
+          'Ese horario no está disponible: otra cancha que comparte el espacio ya está reservada'
+        )
+      }
+
       const turnoId = await this.claimSlot(tx, turno)
       if (!turnoId) throw new ConflictException('El turno ya fue reservado')
 

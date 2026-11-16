@@ -11,6 +11,7 @@ const cancha = {
   nombre: 'El Mate',
   direccion: 'Calle 1',
   barrio: 'Centro',
+  ownerId: 'o1',
   precioHora: 20000,
   montoSena: 5000,
 }
@@ -41,7 +42,7 @@ const makePrisma = () => {
     turno: {
       findUnique: vi.fn(async (_args?: object) => turno() as unknown),
       // The other courts of the same hour, looked up only when the chosen slot was just taken.
-      findMany: vi.fn(async (_args?: object) => [] as { id: string }[]),
+      findMany: vi.fn(async (_args?: object) => [] as object[]),
       updateMany: vi.fn(async (_args?: object) => ({ count: 1 })),
       update: vi.fn(async (_args?: object) => ({})),
     },
@@ -64,6 +65,12 @@ const makePrisma = () => {
       findMany: vi.fn(async (_args?: object) => [] as unknown[]),
       findFirst: vi.fn(async (_args?: object) => null as unknown),
       updateMany: vi.fn(async (_args?: object) => ({ count: 1 })),
+    },
+    // The lock per owner and hour taken before booking (a tagged template call).
+    $executeRaw: vi.fn(async (..._args: unknown[]) => 0),
+    // Entries that share the physical space with the one booked: none unless a test adds them.
+    canchaConflicto: {
+      findMany: vi.fn(async (_args?: object) => [] as { canchaId: string; otraCanchaId: string }[]),
     },
     $transaction: vi.fn(async (arg: unknown) =>
       typeof arg === 'function'
@@ -210,6 +217,84 @@ describe('ReservasService.create', () => {
       const data = createArgs(prisma)
       expect(data.montoTotal).toBe(20000)
       expect(data.pago).toEqual({ create: { monto: 5000, estadoPago: 'PENDING' } })
+    })
+  })
+
+  describe('entries that share the physical space (one court of 11 divided into 3 of 5)', () => {
+    const book = (prisma: ReturnType<typeof makePrisma>) =>
+      new ReservasService(prisma as never, makeNotifications() as never).create(
+        'u1',
+        { turnoId: 't1', tipoPago: 'SENA' },
+        now
+      )
+    // The booked entry c1 shares the space with c-other.
+    const linkedTo = (prisma: ReturnType<typeof makePrisma>, reserved: object[]) => {
+      prisma.canchaConflicto.findMany.mockResolvedValue([
+        { canchaId: 'c1', otraCanchaId: 'c-other' },
+      ])
+      prisma.turno.findMany.mockImplementation(async (args?: object) =>
+        (args as { where: { estado: string } }).where.estado === 'RESERVED' ? reserved : []
+      )
+    }
+
+    it('takes a lock per owner and hour before looking at the links and claiming the slot', async () => {
+      const prisma = makePrisma()
+      await book(prisma)
+
+      expect(prisma.$executeRaw).toHaveBeenCalledTimes(1)
+      const [strings, ...values] = prisma.$executeRaw.mock.calls[0] as unknown as [
+        string[],
+        ...unknown[],
+      ]
+      expect(strings.join('?')).toContain('pg_advisory_xact_lock')
+      expect(values).toEqual(['o1', future.toISOString()])
+      // The lock comes first: otherwise two bookings could both pass the check.
+      expect(prisma.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(
+        prisma.turno.updateMany.mock.invocationCallOrder[0]
+      )
+    })
+
+    it('refuses the booking (409) when a linked entry is reserved at that hour, and claims nothing', async () => {
+      const prisma = makePrisma()
+      linkedTo(prisma, [{ canchaId: 'c-other', fechaHoraInicio: future }])
+
+      await expect(book(prisma)).rejects.toBeInstanceOf(ConflictException)
+
+      expect(prisma.turno.updateMany).not.toHaveBeenCalled()
+      expect(prisma.reserva.create).not.toHaveBeenCalled()
+    })
+
+    it('asks for the reservations of the linked entries exactly at the hour of the slot', async () => {
+      const prisma = makePrisma()
+      linkedTo(prisma, [])
+
+      await book(prisma)
+
+      expect(prisma.turno.findMany).toHaveBeenCalledWith({
+        where: {
+          canchaId: { in: ['c-other'] },
+          estado: 'RESERVED',
+          fechaHoraInicio: { gte: future, lte: future },
+        },
+        select: { canchaId: true, fechaHoraInicio: true },
+      })
+    })
+
+    it('books normally when the linked entry has nothing reserved at that hour', async () => {
+      const prisma = makePrisma()
+      linkedTo(prisma, [])
+
+      await book(prisma)
+
+      expect(createArgs(prisma).turnoId).toBe('t1')
+    })
+
+    it('an entry that shares nothing is not slowed down by looking for reservations', async () => {
+      const prisma = makePrisma()
+
+      await book(prisma)
+
+      expect(prisma.turno.findMany).not.toHaveBeenCalled()
     })
   })
 

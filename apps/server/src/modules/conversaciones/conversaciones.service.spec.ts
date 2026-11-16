@@ -63,6 +63,7 @@ const makePrisma = (reservas: Record<string, Reserva> = {}) => {
   const mensajes: Msg[] = []
   // Slots the owner can offer; tests add, take or move them.
   const turnos: Record<string, Slot> = {}
+  const links: { canchaId: string; otraCanchaId: string }[] = []
   let seq = 0
 
   const withRelations = (row: Row) => ({
@@ -114,23 +115,46 @@ const makePrisma = (reservas: Record<string, Reserva> = {}) => {
         const slot = turnos[args.where.id]
         return slot ? { ...slot, cancha: { ownerId: COURTS[slot.canchaId]?.ownerId } } : null
       }),
-      // Free slots of the courts and hours of the offers (one per court of the entry).
+      // Two kinds of look-up: the free slots of the courts and hours of the offers (one per court
+      // of the entry), and the reservations of the entries that share the space with an offered one.
       findMany: vi.fn(
         async (args: {
-          where: { estado: string; OR: { canchaId: string; fechaHoraInicio: Date }[] }
-        }) =>
-          Object.values(turnos)
-            .filter(
-              (slot) =>
-                slot.estado === args.where.estado &&
+          where: {
+            estado: string
+            canchaId?: { in: string[] }
+            fechaHoraInicio?: { gte?: Date; lte?: Date }
+            OR?: { canchaId: string; fechaHoraInicio: Date }[]
+          }
+        }) => {
+          const { where } = args
+          return Object.values(turnos)
+            .filter((slot) => {
+              if (slot.estado !== where.estado) return false
+              if (where.canchaId) {
+                const { gte, lte } = where.fechaHoraInicio ?? {}
+                return (
+                  where.canchaId.in.includes(slot.canchaId) &&
+                  (!gte || slot.fechaHoraInicio >= gte) &&
+                  (!lte || slot.fechaHoraInicio <= lte)
+                )
+              }
+              return (
                 slot.fechaHoraInicio > new Date() &&
-                args.where.OR.some(
+                (where.OR ?? []).some(
                   (wanted) =>
                     wanted.canchaId === slot.canchaId &&
                     wanted.fechaHoraInicio.getTime() === slot.fechaHoraInicio.getTime()
                 )
-            )
+              )
+            })
             .map((slot) => ({ canchaId: slot.canchaId, fechaHoraInicio: slot.fechaHoraInicio }))
+        }
+      ),
+    },
+    // Entries of the owner that share the physical space; tests add them in `links`.
+    canchaConflicto: {
+      findMany: vi.fn(async (args: { where: { canchaId: { in: string[] } } }) =>
+        links.filter((link) => args.where.canchaId.in.includes(link.canchaId))
       ),
     },
     reserva: {
@@ -243,7 +267,7 @@ const makePrisma = (reservas: Record<string, Reserva> = {}) => {
       ),
     },
   }
-  return Object.assign(prisma, { turnos })
+  return Object.assign(prisma, { turnos, links })
 }
 
 const makeNotifications = () => ({
@@ -747,6 +771,100 @@ describe('ConversacionesService', () => {
       prisma.turnos['t-free'].estado = 'RESERVED'
 
       expect((await service.thread(PLAYER, id)).mensajes.at(-1)?.oferta?.disponible).toBe(false)
+    })
+
+    describe('entries that share the physical space', () => {
+      // The conversation is about the court of 5 (CANCHA); 'cancha-7' stands for the other entry.
+      const linkBothWays = (prisma: ReturnType<typeof setup>['prisma']) =>
+        prisma.links.push(
+          { canchaId: CANCHA, otraCanchaId: 'cancha-7' },
+          { canchaId: 'cancha-7', otraCanchaId: CANCHA }
+        )
+
+      it('does not let the owner offer a slot while the linked entry is reserved at that hour', async () => {
+        const { prisma, service } = setup()
+        linkBothWays(prisma)
+        prisma.turnos['t-linked'] = {
+          canchaId: 'cancha-7',
+          estado: 'RESERVED',
+          fechaHoraInicio: TURNO,
+        }
+        const id = await openChat(service)
+        advance(5)
+
+        await expect(service.send(OWNER, id, 'Tengo este', 't-free')).rejects.toThrow(
+          'Ese horario ya no está disponible'
+        )
+        expect((await service.thread(PLAYER, id)).mensajes).toHaveLength(1)
+      })
+
+      it('lets the owner offer it when the linked entry is reserved at ANOTHER hour', async () => {
+        const { prisma, service } = setup()
+        linkBothWays(prisma)
+        prisma.turnos['t-linked'] = {
+          canchaId: 'cancha-7',
+          estado: 'RESERVED',
+          fechaHoraInicio: new Date(TURNO.getTime() + 3_600_000),
+        }
+        const id = await openChat(service)
+        advance(5)
+
+        const sent = await service.send(OWNER, id, 'Tengo este', 't-free')
+
+        expect(sent.oferta?.disponible).toBe(true)
+      })
+
+      it('an offer already made stops being bookable when the linked entry gets reserved', async () => {
+        const { prisma, service } = setup()
+        linkBothWays(prisma)
+        const id = await openChat(service)
+        advance(5)
+        await service.send(OWNER, id, 'Tengo el sábado a las 17', 't-free')
+        expect((await service.thread(PLAYER, id)).mensajes.at(-1)?.oferta?.disponible).toBe(true)
+
+        // Somebody books the other entry at that hour: the space is taken.
+        prisma.turnos['t-linked'] = {
+          canchaId: 'cancha-7',
+          estado: 'RESERVED',
+          fechaHoraInicio: TURNO,
+        }
+
+        expect((await service.thread(PLAYER, id)).mensajes.at(-1)?.oferta?.disponible).toBe(false)
+      })
+
+      it('and bookable again when that reservation goes away', async () => {
+        const { prisma, service } = setup()
+        linkBothWays(prisma)
+        const id = await openChat(service)
+        advance(5)
+        await service.send(OWNER, id, 'Tengo el sábado a las 17', 't-free')
+        prisma.turnos['t-linked'] = {
+          canchaId: 'cancha-7',
+          estado: 'RESERVED',
+          fechaHoraInicio: TURNO,
+        }
+        expect((await service.thread(PLAYER, id)).mensajes.at(-1)?.oferta?.disponible).toBe(false)
+
+        // The booking expired or the owner cancelled it: nothing was stored, so it frees itself.
+        delete prisma.turnos['t-linked']
+
+        expect((await service.thread(PLAYER, id)).mensajes.at(-1)?.oferta?.disponible).toBe(true)
+      })
+
+      it('without links an offer is not affected by what other entries have reserved', async () => {
+        const { prisma, service } = setup()
+        prisma.turnos['t-other'] = {
+          canchaId: 'cancha-7',
+          estado: 'RESERVED',
+          fechaHoraInicio: TURNO,
+        }
+        const id = await openChat(service)
+        advance(5)
+
+        const sent = await service.send(OWNER, id, 'Tengo el sábado a las 17', 't-free')
+
+        expect(sent.oferta?.disponible).toBe(true)
+      })
     })
 
     it('keeps the offer, not bookable, when the slot left the schedule and was deleted', async () => {

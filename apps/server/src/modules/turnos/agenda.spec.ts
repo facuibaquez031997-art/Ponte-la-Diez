@@ -40,6 +40,10 @@ const booking = (overrides: object = {}) => ({
 const makePrisma = () => ({
   cancha: { findMany: vi.fn(async (_args?: object) => canchas as unknown[]) },
   reserva: { findMany: vi.fn(async (_args?: object) => [] as unknown[]) },
+  // Entries that share the physical space with the one asked about: none unless a test adds them.
+  canchaConflicto: {
+    findMany: vi.fn(async (_args?: object) => [] as { canchaId: string; otraCanchaId: string }[]),
+  },
   turno: { findMany: vi.fn(async (_args?: object) => [] as unknown[]) },
 })
 
@@ -277,5 +281,51 @@ describe('TurnosService.agenda', () => {
     await expect(service.agenda('o1', '2026-02-30', now)).rejects.toBeInstanceOf(
       BadRequestException
     )
+  })
+})
+
+describe('TurnosService.agenda with entries that share the physical space', () => {
+  const linked = () => {
+    const { prisma, service } = makeService()
+    // c1 (El Mate) and c2 (La Bombonera) share the space, in both directions.
+    prisma.canchaConflicto.findMany.mockResolvedValue([
+      { canchaId: 'c1', otraCanchaId: 'c2' },
+      { canchaId: 'c2', otraCanchaId: 'c1' },
+    ])
+    prisma.turno.findMany.mockImplementation(async (args?: object) => {
+      const { estado } = (args as { where: { estado?: string } }).where
+      if (estado === 'RESERVED') {
+        return [{ canchaId: 'c2', fechaHoraInicio: new Date('2026-11-10T21:00:00.000Z') }]
+      }
+      return [
+        turno('a', 'c1', '2026-11-10T21:00:00.000Z'),
+        turno('b', 'c1', '2026-11-10T22:00:00.000Z'),
+        turno('c', 'c2', '2026-11-10T21:00:00.000Z', 'RESERVED', booking()),
+      ]
+    })
+    return service
+  }
+
+  it('marks a free slot as blocked by the name of the entry that holds the space', async () => {
+    const view = await linked().agenda('o1', '2026-11-10', now)
+
+    const [elMate, bombonera] = view.canchas
+    expect(elMate.turnos.map((t) => [t.id, t.estado, t.bloqueadaPor])).toEqual([
+      ['a', 'FREE', 'La Bombonera'],
+      ['b', 'FREE', null],
+    ])
+    // The slot that is reserved is not "blocked": it has its own booking.
+    expect(bombonera.turnos.map((t) => [t.id, t.estado, t.bloqueadaPor])).toEqual([
+      ['c', 'RESERVED', null],
+    ])
+  })
+
+  it('nothing is blocked when the entries share nothing', async () => {
+    const { prisma, service } = makeService()
+    prisma.turno.findMany.mockResolvedValue([turno('a', 'c1', '2026-11-10T21:00:00.000Z')])
+
+    const view = await service.agenda('o1', '2026-11-10', now)
+
+    expect(view.canchas[0].turnos[0].bloqueadaPor).toBeNull()
   })
 })

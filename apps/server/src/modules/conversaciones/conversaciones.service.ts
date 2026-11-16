@@ -10,6 +10,7 @@ import type { ReservaState } from '@prisma/client'
 import { PrismaService } from '../../common/prisma/prisma.service.js'
 import { NotificationsService } from '../notifications/notifications.service.js'
 import { releaseExpiredHolds } from '../reservas/holds.js'
+import { findBlocked, hourKey } from '../turnos/conflicts.js'
 import type { CreateConversacionDto } from './dto/create-conversacion.dto.js'
 import { PresenceService } from './presence.service.js'
 import { MAX_MENSAJE_LENGTH } from './dto/send-mensaje.dto.js'
@@ -125,9 +126,6 @@ export interface OfertaView {
     jugadores: number | null
   }
 }
-
-/** A court at an hour, whichever of its slots (one per court of the entry) is meant. */
-const hourKey = (canchaId: string, start: Date): string => `${canchaId}#${start.getTime()}`
 
 const toOfertaCancha = (court: {
   id: string
@@ -387,6 +385,12 @@ export class ConversacionesService {
     ) {
       throw new BadRequestException('Ese horario ya no está disponible')
     }
+    // Nor can it be offered while an entry that shares its physical space is reserved then.
+    const blocked = await findBlocked(this.prisma, [turno.canchaId], {
+      gte: turno.fechaHoraInicio,
+      lte: turno.fechaHoraInicio,
+    })
+    if (blocked.size > 0) throw new BadRequestException('Ese horario ya no está disponible')
     return {
       ofertaTurnoId: turnoId,
       ofertaInicio: turno.fechaHoraInicio,
@@ -445,6 +449,15 @@ export class ConversacionesService {
         select: { canchaId: true, fechaHoraInicio: true },
       })
       free = new Set(turnos.map((turno) => hourKey(turno.canchaId, turno.fechaHoraInicio)))
+
+      // An hour is not bookable while an entry that shares the physical space is reserved then.
+      const starts = upcoming.map((row) => row.ofertaInicio.getTime())
+      const blocked = await findBlocked(
+        this.prisma,
+        [...new Set(upcoming.map((row) => row.ofertaCanchaId ?? cancha.id))],
+        { gte: new Date(Math.min(...starts)), lte: new Date(Math.max(...starts)) }
+      )
+      for (const key of blocked.keys()) free.delete(key)
     }
 
     return rows.map((row) => {

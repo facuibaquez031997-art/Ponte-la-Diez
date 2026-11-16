@@ -14,6 +14,10 @@ const makePrisma = () => ({
   cancha: { findUnique: vi.fn(async (_args?: object) => ({ id: 'c1' }) as unknown) },
   horarioCancha: { findMany: vi.fn(async (_args?: object) => mondaySchedule as unknown[]) },
   reserva: { findMany: vi.fn(async (_args?: object) => [] as unknown[]) },
+  // Entries that share the physical space with the one asked about: none unless a test adds them.
+  canchaConflicto: {
+    findMany: vi.fn(async (_args?: object) => [] as { canchaId: string; otraCanchaId: string }[]),
+  },
   turno: {
     findMany: vi.fn(async (_args?: object) => [] as unknown[]),
     createMany: vi.fn(async (_args?: object) => ({ count: 0 })),
@@ -281,6 +285,77 @@ describe('TurnosService.listFree', () => {
       canchaId: 'c1',
       estado: 'FREE',
       fechaHoraInicio: { gte: now },
+    })
+  })
+})
+
+describe('TurnosService.listFree with entries that share the physical space', () => {
+  const start = (iso: string) => new Date(iso)
+  const free = (id: string, iso: string, numero = 1) => ({
+    id,
+    fechaHoraInicio: start(iso),
+    fechaHoraFin: new Date(start(iso).getTime() + HOUR),
+    numero,
+  })
+  // Court of 11 (c-11) linked with this entry (c1, courts of 5): the two directions are stored.
+  const withLinks = (reservedOfTheOther: { canchaId: string; fechaHoraInicio: Date }[]) => {
+    const prisma = makePrisma()
+    prisma.canchaConflicto.findMany.mockResolvedValue([{ canchaId: 'c1', otraCanchaId: 'c-11' }])
+    prisma.turno.findMany.mockImplementation(async (args?: object) => {
+      const { estado } = (args as { where: { estado?: string } }).where
+      if (estado === 'RESERVED') return reservedOfTheOther
+      if (estado === 'FREE') {
+        return [
+          free('a1', '2026-11-09T20:00:00.000Z', 1),
+          free('a2', '2026-11-09T20:00:00.000Z', 2),
+          free('b1', '2026-11-09T21:00:00.000Z', 1),
+        ]
+      }
+      return []
+    })
+    return prisma
+  }
+
+  it('hides every court of the hour the linked entry is reserved, and only that hour', async () => {
+    const prisma = withLinks([
+      { canchaId: 'c-11', fechaHoraInicio: start('2026-11-09T20:00:00.000Z') },
+    ])
+
+    const list = await new TurnosService(prisma as never).listFree('c1', '2026-11-09', now)
+
+    expect(list.map((t) => t.id)).toEqual(['b1'])
+  })
+
+  it('shows everything when the linked entry has nothing reserved', async () => {
+    const prisma = withLinks([])
+
+    const list = await new TurnosService(prisma as never).listFree('c1', '2026-11-09', now)
+
+    expect(list.map((t) => t.id)).toEqual(['a1', 'a2', 'b1'])
+  })
+
+  it('a reservation of the same entry does not block its own other courts', async () => {
+    // Only c1 itself has a reserved court: the linked c-11 has nothing, so a2 stays free.
+    const prisma = withLinks([
+      { canchaId: 'c1', fechaHoraInicio: start('2026-11-09T20:00:00.000Z') },
+    ])
+
+    const list = await new TurnosService(prisma as never).listFree('c1', '2026-11-09', now)
+
+    expect(list.map((t) => t.id)).toEqual(['a1', 'a2', 'b1'])
+  })
+
+  it('looks for the reservations of the linked entries only in the range that is listed', async () => {
+    const prisma = withLinks([])
+
+    await new TurnosService(prisma as never).listFree('c1', '2026-11-09', now)
+
+    const reservedCall = prisma.turno.findMany.mock.calls
+      .map((call) => call[0] as { where: { estado?: string; fechaHoraInicio?: unknown } })
+      .find((args) => args.where.estado === 'RESERVED')
+    expect(reservedCall?.where.fechaHoraInicio).toEqual({
+      gte: new Date('2026-11-09T15:00:00.000Z'),
+      lt: new Date('2026-11-10T03:00:00.000Z'),
     })
   })
 })
