@@ -39,7 +39,8 @@ describe('buildPreferenceBody', () => {
       clientUrl: 'http://localhost:5173',
       notificationUrl: 'https://abc.ngrok.app/api/pagos/webhook',
     })
-    expect(withUrl.notification_url).toBe('https://abc.ngrok.app/api/pagos/webhook')
+    // The booking travels in the URL so the webhook can tell whose account the payment is on.
+    expect(withUrl.notification_url).toBe('https://abc.ngrok.app/api/pagos/webhook?reserva=r1')
   })
 
   it('sends the marketplace fee in pesos only when there is one to take', () => {

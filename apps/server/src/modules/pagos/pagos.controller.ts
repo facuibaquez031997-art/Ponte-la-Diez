@@ -33,14 +33,19 @@ export class PagosController {
     @Headers('x-request-id') xRequestId: string | undefined,
     @Query('data.id') dataId: string | undefined,
     @Query('type') queryType: string | undefined,
-    @Body() body: { type?: unknown } | undefined
+    @Query('reserva') reservaId: string | undefined,
+    @Body() body: { type?: unknown; user_id?: unknown } | undefined
   ): Promise<{ result: NotificationResult }> {
     const bodyType = typeof body?.type === 'string' ? body.type : undefined
+    const sellerId = body?.user_id
     return this.pagos.handleWebhook({
       xSignature,
       xRequestId,
       dataId: typeof dataId === 'string' ? dataId : undefined,
       type: typeof queryType === 'string' ? queryType : bodyType,
+      sellerUserId:
+        typeof sellerId === 'string' || typeof sellerId === 'number' ? String(sellerId) : undefined,
+      reservaId: typeof reservaId === 'string' ? reservaId : undefined,
     })
   }
 }

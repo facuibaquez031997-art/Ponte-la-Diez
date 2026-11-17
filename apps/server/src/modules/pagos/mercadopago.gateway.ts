@@ -21,35 +21,40 @@ export interface PreferenceResult {
 /** Thin wrapper over the Mercado Pago SDK so the business rules never import it. */
 @Injectable()
 export class MercadoPagoGateway {
-  private readonly client?: MercadoPagoConfig
+  private readonly configured: boolean
   private readonly clientUrl: string
   private readonly notificationUrl?: string
   private readonly webhookSecret?: string
 
   constructor(config: ConfigService) {
-    const accessToken = config.get<string>('MP_ACCESS_TOKEN')
-    this.client = accessToken
-      ? new MercadoPagoConfig({ accessToken, options: { timeout: 8000 } })
-      : undefined
+    // The platform token no longer charges or reads payments (the owners' tokens do); it is still
+    // what the OAuth gateway authenticates with, so it stays the "Mercado Pago is set up" flag.
+    this.configured = Boolean(config.get<string>('MP_ACCESS_TOKEN'))
     this.clientUrl = config.get<string>('CLIENT_URL') ?? 'http://localhost:5173'
     this.notificationUrl = config.get<string>('MP_NOTIFICATION_URL')
     this.webhookSecret = config.get<string>('MP_WEBHOOK_SECRET')
   }
 
   isConfigured(): boolean {
-    return this.client !== undefined
+    return this.configured
   }
 
   getWebhookSecret(): string | undefined {
     return this.webhookSecret
   }
 
-  /** Reads a payment straight from Mercado Pago. Returns null when it does not exist. */
-  async getPayment(id: string): Promise<PaymentInfo | null> {
-    if (!this.client) throw new Error('Mercado Pago is not configured')
+  /**
+   * Reads a payment straight from Mercado Pago with the token of the owner it was made to.
+   * Returns null when it does not exist on that account.
+   */
+  async getPayment(id: string, ownerAccessToken: string): Promise<PaymentInfo | null> {
+    const ownerClient = new MercadoPagoConfig({
+      accessToken: ownerAccessToken,
+      options: { timeout: 8000 },
+    })
 
     try {
-      const payment = await new Payment(this.client).get({ id })
+      const payment = await new Payment(ownerClient).get({ id })
       return {
         id: String(payment.id),
         status: payment.status ?? 'unknown',

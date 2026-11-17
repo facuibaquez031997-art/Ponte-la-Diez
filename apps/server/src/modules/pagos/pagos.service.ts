@@ -25,6 +25,10 @@ export interface WebhookRequest {
   xRequestId?: string
   dataId?: string
   type?: string
+  /** `user_id` of the notification body: the Mercado Pago account the payment was made to. */
+  sellerUserId?: string
+  /** `reserva` of the notification URL we set on the preference. */
+  reservaId?: string
 }
 
 @Injectable()
@@ -127,16 +131,59 @@ export class PagosService {
     if (!signed) throw new UnauthorizedException('Firma de notificación inválida')
 
     if (request.type !== 'payment' || !request.dataId) return { result: 'ignored' }
-    return { result: await this.handlePaymentNotification(request.dataId) }
+
+    const ownerId = await this.findOwnerId(request)
+    if (!ownerId) {
+      this.logger.warn(
+        `Payment notification ${request.dataId} cannot be tied to any owner: ignored`
+      )
+      return { result: 'ignored' }
+    }
+    return { result: await this.handlePaymentNotification(request.dataId, ownerId) }
   }
 
   /**
-   * Confirms the booking of an APPROVED payment. Safe to run any number of times for the same
-   * payment. A payment that is rejected, pending or cancelled changes nothing: Checkout Pro lets
-   * the player retry, and the booking hold ends on its own.
+   * The payment lives on the owner's account, so the owner is needed to read it. The seller id
+   * Mercado Pago sends goes first (it does not depend on the booking still existing); the booking
+   * named in our notification URL is the fallback. Neither is trusted: the payment is read with
+   * that owner's token and the booking must belong to that same owner.
    */
-  async handlePaymentNotification(paymentId: string): Promise<NotificationResult> {
-    const payment = await this.gateway.getPayment(paymentId)
+  private async findOwnerId(request: WebhookRequest): Promise<string | undefined> {
+    if (request.sellerUserId) {
+      const cuenta = await this.prisma.mpCuenta.findFirst({
+        where: { mpUserId: request.sellerUserId },
+        select: { userId: true },
+      })
+      if (cuenta) return cuenta.userId
+    }
+    if (request.reservaId) {
+      const reserva = await this.prisma.reserva.findUnique({
+        where: { id: request.reservaId },
+        select: { turno: { select: { cancha: { select: { ownerId: true } } } } },
+      })
+      return reserva?.turno.cancha.ownerId
+    }
+    return undefined
+  }
+
+  /**
+   * Confirms the booking of an APPROVED payment made to `ownerId`. Safe to run any number of
+   * times for the same payment. A payment that is rejected, pending or cancelled changes nothing:
+   * Checkout Pro lets the player retry, and the booking hold ends on its own.
+   */
+  async handlePaymentNotification(paymentId: string, ownerId: string): Promise<NotificationResult> {
+    let ownerAccessToken: string
+    try {
+      ownerAccessToken = await this.cuentas.getAccessToken(ownerId)
+    } catch (error) {
+      if (!(error instanceof NotFoundException)) throw error
+      this.logger.warn(
+        `Payment ${paymentId} notified for owner ${ownerId}, who has no linked account`
+      )
+      return 'ignored'
+    }
+
+    const payment = await this.gateway.getPayment(paymentId, ownerAccessToken)
     if (!payment || payment.status !== 'approved' || !payment.externalReference) return 'ignored'
 
     const reserva = await this.prisma.reserva.findUnique({
@@ -153,6 +200,12 @@ export class PagosService {
       if (closed) return 'duplicate'
       this.logger.error(
         `Payment ${payment.id} was approved but booking ${payment.externalReference} no longer exists: needs a manual refund`
+      )
+      return 'ignored'
+    }
+    if (reserva.turno.cancha.ownerId !== ownerId) {
+      this.logger.warn(
+        `Payment ${payment.id} came in for owner ${ownerId} but booking ${reserva.id} belongs to another owner: not confirmed`
       )
       return 'ignored'
     }

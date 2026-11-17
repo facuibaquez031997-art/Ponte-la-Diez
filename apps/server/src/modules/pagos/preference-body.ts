@@ -28,6 +28,13 @@ export interface PreferenceBody {
 
 export const RESULT_PATH = '/reservas/resultado'
 
+/** Names the booking in the webhook URL: the payment lives on the owner's account, so the webhook needs to know whose. */
+function withReserva(notificationUrl: string, reservaId: string): string {
+  const url = new URL(notificationUrl)
+  url.searchParams.set('reserva', reservaId)
+  return url.toString()
+}
+
 export function buildPreferenceBody(input: PreferenceInput, urls: PreferenceUrls): PreferenceBody {
   const clientUrl = urls.clientUrl.replace(/\/+$/, '')
   const resultUrl = `${clientUrl}${RESULT_PATH}`
@@ -48,7 +55,9 @@ export function buildPreferenceBody(input: PreferenceInput, urls: PreferenceUrls
     expiration_date_to: input.expiresAt.toISOString(),
     // Mercado Pago rejects the automatic return when the back URL is not https.
     ...(clientUrl.startsWith('https://') ? { auto_return: 'approved' as const } : {}),
-    ...(urls.notificationUrl ? { notification_url: urls.notificationUrl } : {}),
+    ...(urls.notificationUrl
+      ? { notification_url: withReserva(urls.notificationUrl, input.reservaId) }
+      : {}),
     ...(input.marketplaceFee ? { marketplace_fee: input.marketplaceFee } : {}),
   }
 }

@@ -51,6 +51,10 @@ const makePrisma = () => {
       update: vi.fn(async (_args?: object) => ({})),
       deleteMany: vi.fn(async (_args?: object) => ({ count: 1 })),
     },
+    mpCuenta: {
+      // The linked account of the seller named in a notification (none unless a test adds it).
+      findFirst: vi.fn(async (_args?: object) => null as unknown),
+    },
     turno: {
       // The confirmed bookings of the courts that share the space (none unless a test adds them).
       findMany: vi.fn(async (_args?: object) => [] as object[]),
@@ -268,9 +272,9 @@ describe('PagosService.createPreference', () => {
 describe('PagosService.handlePaymentNotification', () => {
   it('confirms the booking and stores the payment id when the payment is approved', async () => {
     const { service, prisma, gateway } = build()
-    const result = await service.handlePaymentNotification('123456')
+    const result = await service.handlePaymentNotification('123456', 'o1')
     expect(result).toBe('confirmed')
-    expect(gateway.getPayment).toHaveBeenCalledWith('123456')
+    expect(gateway.getPayment).toHaveBeenCalledWith('123456', 'owner-token')
     expect(prisma.reserva.updateMany).toHaveBeenCalledWith({
       where: { id: 'r1', estado: 'PENDING' },
       data: { estado: 'CONFIRMED' },
@@ -286,7 +290,7 @@ describe('PagosService.handlePaymentNotification', () => {
     prisma.reserva.findUnique.mockResolvedValue(
       reserva({ estado: 'CONFIRMED', pago: { id: 'p1', estadoPago: 'APPROVED', monto: 5000 } })
     )
-    expect(await service.handlePaymentNotification('123456')).toBe('duplicate')
+    expect(await service.handlePaymentNotification('123456', 'o1')).toBe('duplicate')
     expect(prisma.reserva.updateMany).not.toHaveBeenCalled()
     expect(prisma.pago.update).not.toHaveBeenCalled()
   })
@@ -294,7 +298,7 @@ describe('PagosService.handlePaymentNotification', () => {
   it('does not confirm when the amount paid is lower than the amount charged', async () => {
     const { service, prisma, gateway } = build()
     gateway.getPayment.mockResolvedValue(payment({ transactionAmount: 4999 }))
-    expect(await service.handlePaymentNotification('123456')).toBe('ignored')
+    expect(await service.handlePaymentNotification('123456', 'o1')).toBe('ignored')
     expect(prisma.reserva.updateMany).not.toHaveBeenCalled()
     expect(prisma.pago.update).not.toHaveBeenCalled()
   })
@@ -302,14 +306,14 @@ describe('PagosService.handlePaymentNotification', () => {
   it('does not touch anything when the booking was already released', async () => {
     const { service, prisma } = build()
     prisma.reserva.findUnique.mockResolvedValue(null)
-    expect(await service.handlePaymentNotification('123456')).toBe('ignored')
+    expect(await service.handlePaymentNotification('123456', 'o1')).toBe('ignored')
     expect(prisma.pago.update).not.toHaveBeenCalled()
   })
 
   it('does not update the payment when the booking stopped being PENDING meanwhile', async () => {
     const { service, prisma } = build()
     prisma.reserva.updateMany.mockResolvedValue({ count: 0 })
-    expect(await service.handlePaymentNotification('123456')).toBe('ignored')
+    expect(await service.handlePaymentNotification('123456', 'o1')).toBe('ignored')
     expect(prisma.pago.update).not.toHaveBeenCalled()
   })
 
@@ -318,7 +322,7 @@ describe('PagosService.handlePaymentNotification', () => {
     async (status) => {
       const { service, prisma, gateway } = build()
       gateway.getPayment.mockResolvedValue(payment({ status }))
-      expect(await service.handlePaymentNotification('123456')).toBe('ignored')
+      expect(await service.handlePaymentNotification('123456', 'o1')).toBe('ignored')
       expect(prisma.reserva.updateMany).not.toHaveBeenCalled()
       expect(prisma.pago.update).not.toHaveBeenCalled()
     }
@@ -327,21 +331,49 @@ describe('PagosService.handlePaymentNotification', () => {
   it('ignores a payment that Mercado Pago does not know', async () => {
     const { service, gateway, prisma } = build()
     gateway.getPayment.mockResolvedValue(null)
-    expect(await service.handlePaymentNotification('123456')).toBe('ignored')
+    expect(await service.handlePaymentNotification('123456', 'o1')).toBe('ignored')
     expect(prisma.reserva.findUnique).not.toHaveBeenCalled()
   })
 
   it('ignores a payment that is not linked to a booking', async () => {
     const { service, gateway, prisma } = build()
     gateway.getPayment.mockResolvedValue(payment({ externalReference: undefined }))
-    expect(await service.handlePaymentNotification('123456')).toBe('ignored')
+    expect(await service.handlePaymentNotification('123456', 'o1')).toBe('ignored')
     expect(prisma.reserva.findUnique).not.toHaveBeenCalled()
   })
 
   it('fails when Mercado Pago cannot be reached so it retries the notification', async () => {
     const { service, gateway } = build()
     gateway.getPayment.mockRejectedValue(new Error('network down'))
-    await expect(service.handlePaymentNotification('123456')).rejects.toThrow('network down')
+    await expect(service.handlePaymentNotification('123456', 'o1')).rejects.toThrow('network down')
+  })
+
+  it("reads the payment with the owner's token", async () => {
+    const { service, gateway, cuentas } = build()
+    await service.handlePaymentNotification('123456', 'o1')
+    expect(cuentas.getAccessToken).toHaveBeenCalledWith('o1')
+    expect(gateway.getPayment).toHaveBeenCalledWith('123456', 'owner-token')
+  })
+
+  it('ignores the notification when the owner has no linked account', async () => {
+    const cuentas = makeCuentas()
+    cuentas.getAccessToken.mockRejectedValue(new NotFoundException('sin cuenta'))
+    const { service, gateway, prisma } = build(
+      makePrisma(),
+      makeGateway(),
+      makeNotifications(),
+      cuentas
+    )
+    expect(await service.handlePaymentNotification('123456', 'o1')).toBe('ignored')
+    expect(gateway.getPayment).not.toHaveBeenCalled()
+    expect(prisma.pago.update).not.toHaveBeenCalled()
+  })
+
+  it('does not confirm a payment whose booking belongs to another owner', async () => {
+    const { service, prisma } = build()
+    expect(await service.handlePaymentNotification('123456', 'someone-else')).toBe('ignored')
+    expect(prisma.reserva.updateMany).not.toHaveBeenCalled()
+    expect(prisma.pago.update).not.toHaveBeenCalled()
   })
 })
 
@@ -375,9 +407,55 @@ describe('PagosService.handleWebhook', () => {
     const v1 = createHmac('sha256', 'secret')
       .update('id:123456;request-id:req-1;ts:1;')
       .digest('hex')
-    const result = await service.handleWebhook(request({ xSignature: `ts=1,v1=${v1}` }))
+    const result = await service.handleWebhook(
+      request({ xSignature: `ts=1,v1=${v1}`, reservaId: 'r1' })
+    )
     expect(result).toEqual({ result: 'confirmed' })
     expect(prisma.pago.update).toHaveBeenCalled()
+  })
+
+  describe('finding the owner the payment was made to', () => {
+    const signed = async (overrides: object = {}) => {
+      const { createHmac } = await import('node:crypto')
+      const v1 = createHmac('sha256', 'secret')
+        .update('id:123456;request-id:req-1;ts:1;')
+        .digest('hex')
+      return request({ xSignature: `ts=1,v1=${v1}`, ...overrides })
+    }
+
+    it('uses the seller id Mercado Pago sends in the notification', async () => {
+      const { service, prisma, gateway } = build()
+      prisma.mpCuenta.findFirst.mockResolvedValue({ userId: 'o1' })
+      expect(await service.handleWebhook(await signed({ sellerUserId: '998877' }))).toEqual({
+        result: 'confirmed',
+      })
+      expect(prisma.mpCuenta.findFirst).toHaveBeenCalledWith({
+        where: { mpUserId: '998877' },
+        select: { userId: true },
+      })
+      expect(gateway.getPayment).toHaveBeenCalledWith('123456', 'owner-token')
+    })
+
+    it('falls back to the owner of the booking named in the notification URL', async () => {
+      const { service, prisma } = build()
+      expect(await service.handleWebhook(await signed({ reservaId: 'r1' }))).toEqual({
+        result: 'confirmed',
+      })
+      expect(prisma.mpCuenta.findFirst).not.toHaveBeenCalled()
+    })
+
+    it('falls back to the booking when the seller has no linked account here', async () => {
+      const { service } = build()
+      expect(
+        await service.handleWebhook(await signed({ sellerUserId: '1', reservaId: 'r1' }))
+      ).toEqual({ result: 'confirmed' })
+    })
+
+    it('ignores a notification it cannot tie to any owner, without reading the payment', async () => {
+      const { service, gateway } = build()
+      expect(await service.handleWebhook(await signed())).toEqual({ result: 'ignored' })
+      expect(gateway.getPayment).not.toHaveBeenCalled()
+    })
   })
 
   it('ignores signed notifications of other topics or without a payment id', async () => {
@@ -397,7 +475,7 @@ describe('PagosService.handleWebhook', () => {
 describe('PagosService notifies the owner of the confirmed booking', () => {
   it('notifies once, with the booking id, when the payment confirms the booking', async () => {
     const { service, notifications } = build()
-    expect(await service.handlePaymentNotification('123456')).toBe('confirmed')
+    expect(await service.handlePaymentNotification('123456', 'o1')).toBe('confirmed')
     expect(notifications.notifyBookingConfirmed).toHaveBeenCalledTimes(1)
     expect(notifications.notifyBookingConfirmed).toHaveBeenCalledWith('r1')
   })
@@ -407,24 +485,24 @@ describe('PagosService notifies the owner of the confirmed booking', () => {
     prisma.reserva.findUnique.mockResolvedValue(
       reserva({ estado: 'CONFIRMED', pago: { id: 'p1', estadoPago: 'APPROVED', monto: 5000 } })
     )
-    expect(await service.handlePaymentNotification('123456')).toBe('duplicate')
+    expect(await service.handlePaymentNotification('123456', 'o1')).toBe('duplicate')
     expect(notifications.notifyBookingConfirmed).not.toHaveBeenCalled()
   })
 
   it('does not notify when nothing was confirmed', async () => {
     const { service, prisma, gateway, notifications } = build()
     gateway.getPayment.mockResolvedValue(payment({ status: 'rejected' }))
-    expect(await service.handlePaymentNotification('123456')).toBe('ignored')
+    expect(await service.handlePaymentNotification('123456', 'o1')).toBe('ignored')
     prisma.reserva.updateMany.mockResolvedValue({ count: 0 })
     gateway.getPayment.mockResolvedValue(payment())
-    expect(await service.handlePaymentNotification('123456')).toBe('ignored')
+    expect(await service.handlePaymentNotification('123456', 'o1')).toBe('ignored')
     expect(notifications.notifyBookingConfirmed).not.toHaveBeenCalled()
   })
 
   it('still answers confirmed when the notification itself fails', async () => {
     const { service, notifications } = build()
     notifications.notifyBookingConfirmed.mockRejectedValue(new Error('push down'))
-    expect(await service.handlePaymentNotification('123456')).toBe('confirmed')
+    expect(await service.handlePaymentNotification('123456', 'o1')).toBe('confirmed')
   })
 })
 
@@ -466,7 +544,7 @@ describe('PagosService: courts that share the physical space', () => {
     it('takes the lock of the owner and the hour before it looks at the links and confirms', async () => {
       const { prisma, service } = build()
 
-      await service.handlePaymentNotification('123456')
+      await service.handlePaymentNotification('123456', 'o1')
 
       expect(prisma.$executeRaw).toHaveBeenCalledTimes(1)
       const [strings, ...values] = prisma.$executeRaw.mock.calls[0] as unknown as [
@@ -484,7 +562,7 @@ describe('PagosService: courts that share the physical space', () => {
       const { prisma, notifications, service } = build()
       shared(prisma, [])
 
-      await expect(service.handlePaymentNotification('123456')).resolves.toBe('confirmed')
+      await expect(service.handlePaymentNotification('123456', 'o1')).resolves.toBe('confirmed')
 
       expect(prisma.reserva.updateMany).toHaveBeenCalledWith({
         where: { id: 'r1', estado: 'PENDING' },
@@ -503,7 +581,7 @@ describe('PagosService: courts that share the physical space', () => {
         const { prisma, service } = build()
         shared(prisma, taken)
 
-        await expect(service.handlePaymentNotification('123456')).resolves.toBe('conflict')
+        await expect(service.handlePaymentNotification('123456', 'o1')).resolves.toBe('conflict')
 
         expect(prisma.reserva.updateMany).toHaveBeenCalledWith({
           where: { id: 'r1', estado: 'PENDING' },
@@ -530,7 +608,7 @@ describe('PagosService: courts that share the physical space', () => {
         const { prisma, service } = build()
         shared(prisma, taken)
 
-        await service.handlePaymentNotification('123456')
+        await service.handlePaymentNotification('123456', 'o1')
 
         expect(prisma.pago.deleteMany).toHaveBeenCalledWith({ where: { reservaId: 'r1' } })
         expect(prisma.reserva.delete).toHaveBeenCalledWith({ where: { id: 'r1' } })
@@ -545,7 +623,7 @@ describe('PagosService: courts that share the physical space', () => {
         gateway.getPayment.mockResolvedValue(payment({ transactionAmount: 20000 }))
         shared(prisma, taken)
 
-        await service.handlePaymentNotification('123456')
+        await service.handlePaymentNotification('123456', 'o1')
 
         const call = prisma.historialReserva.create.mock.calls[0][0] as {
           data: { montoPagado: number }
@@ -557,7 +635,7 @@ describe('PagosService: courts that share the physical space', () => {
         const { prisma, notifications, service } = build()
         shared(prisma, taken)
 
-        await service.handlePaymentNotification('123456')
+        await service.handlePaymentNotification('123456', 'o1')
 
         expect(notifications.notifyBookingSpaceTaken).toHaveBeenCalledWith({
           jugadorId: 'u1',
@@ -572,7 +650,7 @@ describe('PagosService: courts that share the physical space', () => {
         const { prisma, notifications, service } = build()
         shared(prisma, taken)
 
-        await service.handlePaymentNotification('123456')
+        await service.handlePaymentNotification('123456', 'o1')
 
         expect(notifications.notifyOwnerSpaceTaken).toHaveBeenCalledWith({
           ownerId: 'o1',
@@ -587,7 +665,7 @@ describe('PagosService: courts that share the physical space', () => {
         const { prisma, notifications, service } = build()
         shared(prisma, [])
 
-        await service.handlePaymentNotification('123456')
+        await service.handlePaymentNotification('123456', 'o1')
 
         expect(notifications.notifyOwnerSpaceTaken).not.toHaveBeenCalled()
         expect(notifications.notifyBookingSpaceTaken).not.toHaveBeenCalled()
@@ -598,7 +676,7 @@ describe('PagosService: courts that share the physical space', () => {
         shared(prisma, taken)
         notifications.notifyBookingSpaceTaken.mockRejectedValue(new Error('push down'))
 
-        await expect(service.handlePaymentNotification('123456')).resolves.toBe('conflict')
+        await expect(service.handlePaymentNotification('123456', 'o1')).resolves.toBe('conflict')
 
         expect(notifications.notifyOwnerSpaceTaken).toHaveBeenCalled()
       })
@@ -608,7 +686,7 @@ describe('PagosService: courts that share the physical space', () => {
         shared(prisma, taken)
         notifications.notifyOwnerSpaceTaken.mockRejectedValue(new Error('push down'))
 
-        await expect(service.handlePaymentNotification('123456')).resolves.toBe('conflict')
+        await expect(service.handlePaymentNotification('123456', 'o1')).resolves.toBe('conflict')
 
         expect(notifications.notifyBookingSpaceTaken).toHaveBeenCalled()
       })
@@ -618,7 +696,7 @@ describe('PagosService: courts that share the physical space', () => {
         shared(prisma, taken)
         notifications.notifyBookingSpaceTaken.mockRejectedValue(new Error('push down'))
 
-        await expect(service.handlePaymentNotification('123456')).resolves.toBe('conflict')
+        await expect(service.handlePaymentNotification('123456', 'o1')).resolves.toBe('conflict')
       })
 
       it('does nothing when the booking changed meanwhile (it is not PENDING anymore)', async () => {
@@ -626,7 +704,7 @@ describe('PagosService: courts that share the physical space', () => {
         shared(prisma, taken)
         prisma.reserva.updateMany.mockResolvedValue({ count: 0 })
 
-        await expect(service.handlePaymentNotification('123456')).resolves.toBe('ignored')
+        await expect(service.handlePaymentNotification('123456', 'o1')).resolves.toBe('ignored')
 
         expect(prisma.historialReserva.create).not.toHaveBeenCalled()
         expect(prisma.reserva.delete).not.toHaveBeenCalled()
@@ -638,7 +716,7 @@ describe('PagosService: courts that share the physical space', () => {
         prisma.reserva.findUnique.mockResolvedValue(null)
         prisma.historialReserva.findFirst.mockResolvedValue({ id: 'h1' })
 
-        await expect(service.handlePaymentNotification('123456')).resolves.toBe('duplicate')
+        await expect(service.handlePaymentNotification('123456', 'o1')).resolves.toBe('duplicate')
 
         expect(prisma.historialReserva.findFirst).toHaveBeenCalledWith({
           where: { mpPaymentId: '123456' },
