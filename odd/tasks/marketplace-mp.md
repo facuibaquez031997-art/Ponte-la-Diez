@@ -15,8 +15,8 @@ Branch: feat/marketplace-mp (from feat/bloqueo-al-pagar) · Delivery: ask-on-ris
 
 - T1 · S2, S4 · inline · Schema + OAuth link: owner MP account fields on the data model, authorize/callback endpoints, token refresh · commit: ef5e2b2 (schema + crypto), a9c9442 (state, OAuth gateway, service, endpoints) · native review pending (assess: high, item 2)
 - T2 · S1, S2 · inline · Create the preference with the owner's token and `marketplace_fee` = 10% of the charged amount; block payment when the owner is not linked · commit: d287e78
-- T3 · S2 · inline · Webhook and `getPayment` read the payment with the owner's token (open question: how to find the owner from the notification; verify against Mercado Pago docs first) · commit: see L9 (hash recorded with T4)
-- T4 · S2 · inline · Refunds from the owner's account through the API (owner cancellation and ESPACIO_OCUPADO), replacing the manual "devolución hecha" · commit: pending
+- T3 · S2 · inline · Webhook and `getPayment` read the payment with the owner's token (open question: how to find the owner from the notification; verify against Mercado Pago docs first) · commit: f082ca1
+- T4 · S2 · inline · Refunds from the owner's account through the API (owner cancellation and ESPACIO_OCUPADO), replacing the manual "devolución hecha" · commit: 79b2793 (refund service + gateway), second unit see L10 (hash recorded with T5)
 - T5 · S2 · inline · Client: owner "Cuenta Mercado Pago vinculada" screen (Stitch), link status, docs and PENDIENTES update · commit: pending
 
 ## Log

@@ -8,6 +8,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common'
 import { HOLD_MS } from '../reservas/holds.js'
+import type { RefundOutcome } from './devoluciones.service.js'
 import { PagosService } from './pagos.service.js'
 
 const now = new Date('2026-11-14T15:00:00.000Z')
@@ -105,23 +106,30 @@ const makeConfig = (values: Record<string, unknown> = {}) => ({
   get: vi.fn((name: string) => values[name]),
 })
 
+const makeDevoluciones = (outcome: RefundOutcome = 'refunded') => ({
+  refund: vi.fn(async (_historialId?: string, _now?: Date) => outcome),
+})
+
 const build = (
   prisma = makePrisma(),
   gateway = makeGateway(),
   notifications = makeNotifications(),
   cuentas = makeCuentas(),
-  config = makeConfig()
+  config = makeConfig(),
+  devoluciones = makeDevoluciones()
 ) => ({
   prisma,
   gateway,
   notifications,
   cuentas,
+  devoluciones,
   service: new PagosService(
     prisma as never,
     gateway as never,
     notifications as never,
     cuentas as never,
-    config as never
+    config as never,
+    devoluciones as never
   ),
 })
 
@@ -642,8 +650,49 @@ describe('PagosService: courts that share the physical space', () => {
           canchaNombre: 'El Mate',
           turnoInicio: new Date('2026-11-15T20:00:00.000Z'),
           montoPagado: 5000,
+          devuelta: true,
         })
         expect(notifications.notifyBookingConfirmed).not.toHaveBeenCalled()
+      })
+
+      it("refunds the payment from the owner's account right after closing the booking", async () => {
+        const { prisma, devoluciones, service } = build()
+        shared(prisma, taken)
+
+        await service.handlePaymentNotification('123456', 'o1')
+
+        expect(devoluciones.refund).toHaveBeenCalledTimes(1)
+        expect(devoluciones.refund).toHaveBeenCalledWith('h1')
+      })
+
+      it('keeps the refund pending and says so when it could not be made', async () => {
+        const { prisma, notifications, service } = build(
+          makePrisma(),
+          makeGateway(),
+          makeNotifications(),
+          makeCuentas(),
+          makeConfig(),
+          makeDevoluciones('failed')
+        )
+        shared(prisma, taken)
+
+        await expect(service.handlePaymentNotification('123456', 'o1')).resolves.toBe('conflict')
+
+        expect(notifications.notifyBookingSpaceTaken).toHaveBeenCalledWith(
+          expect.objectContaining({ devuelta: false })
+        )
+        expect(notifications.notifyOwnerSpaceTaken).toHaveBeenCalledWith(
+          expect.objectContaining({ devuelta: false })
+        )
+      })
+
+      it('does not refund anything when the payment is confirmed normally', async () => {
+        const { prisma, devoluciones, service } = build()
+        shared(prisma, [])
+
+        await service.handlePaymentNotification('123456', 'o1')
+
+        expect(devoluciones.refund).not.toHaveBeenCalled()
       })
 
       it('tells the owner too: who paid, how much, and that the refund is theirs to make', async () => {
@@ -658,6 +707,7 @@ describe('PagosService: courts that share the physical space', () => {
           canchaNombre: 'El Mate',
           turnoInicio: new Date('2026-11-15T20:00:00.000Z'),
           montoPagado: 5000,
+          devuelta: true,
         })
       })
 

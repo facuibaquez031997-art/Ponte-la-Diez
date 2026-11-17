@@ -26,6 +26,15 @@ export class DevolucionesService {
    * to know whether the player was paid back. Safe to repeat for the same record.
    */
   async refund(historialId: string, now: Date = new Date()): Promise<RefundOutcome> {
+    try {
+      return await this.attempt(historialId, now)
+    } catch (error) {
+      this.logger.error(`Could not refund ${historialId}`, error)
+      return 'failed'
+    }
+  }
+
+  private async attempt(historialId: string, now: Date): Promise<RefundOutcome> {
     const row = await this.prisma.historialReserva.findUnique({
       where: { id: historialId },
       include: { cancha: { select: { ownerId: true } } },

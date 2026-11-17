@@ -572,6 +572,21 @@ describe('NotificationsService.notifyBookingCancelled', () => {
     expect(created.data[0].cuerpo).toContain('devolución')
   })
 
+  it('says the money was already returned when the refund went through', async () => {
+    const { prisma, service } = makeDeps()
+    prisma.user.findUnique.mockResolvedValue({ id: 'u1', subscriptions: [] })
+
+    await service.notifyBookingCancelled({ ...data, devuelta: true })
+
+    const created = prisma.notificacion.createMany.mock.calls[0][0] as {
+      data: Array<{ cuerpo: string }>
+    }
+    expect(created.data[0].cuerpo).toContain('Te devolvimos')
+    expect(created.data[0].cuerpo).toContain('5.000')
+    expect(created.data[0].cuerpo).toContain('por Mercado Pago')
+    expect(created.data[0].cuerpo).not.toContain('coordinar')
+  })
+
   it('says nothing was charged when the player had not paid', async () => {
     const { prisma, service } = makeDeps()
     prisma.user.findUnique.mockResolvedValue({ id: 'u1', subscriptions: [] })
@@ -744,6 +759,21 @@ describe('NotificationsService.notifyBookingSpaceTaken', () => {
     expect(created.data[0].cuerpo).toContain('devolución')
   })
 
+  it('says the money was already returned when the refund went through', async () => {
+    const { prisma, service } = makeDeps()
+    prisma.user.findUnique.mockResolvedValue({ id: 'u1', subscriptions: [] })
+
+    await service.notifyBookingSpaceTaken({ ...data, devuelta: true })
+
+    const created = prisma.notificacion.createMany.mock.calls[0][0] as {
+      data: Array<{ cuerpo: string }>
+    }
+    expect(created.data[0].cuerpo).toContain('Te devolvimos')
+    expect(created.data[0].cuerpo).toContain('5.000')
+    expect(created.data[0].cuerpo).toContain('por Mercado Pago')
+    expect(created.data[0].cuerpo).not.toContain('coordinar')
+  })
+
   it('sends the push to the devices of the player', async () => {
     const { prisma, push, service } = makeDeps()
     prisma.user.findUnique.mockResolvedValue({ id: 'u1', subscriptions: [sub('p1'), sub('p2')] })
@@ -806,6 +836,19 @@ describe('NotificationsService.notifyOwnerSpaceTaken', () => {
     expect(created.data[0].cuerpo).toContain('17:00')
     expect(created.data[0].cuerpo).toContain('5.000')
     expect(created.data[0].cuerpo).toContain('devolverle')
+  })
+
+  it('tells the owner the refund was already made from their account when it went through', async () => {
+    const { prisma, service } = makeDeps()
+    users(prisma)
+
+    await service.notifyOwnerSpaceTaken({ ...data, devuelta: true })
+
+    const created = prisma.notificacion.createMany.mock.calls[0][0] as {
+      data: Array<{ cuerpo: string }>
+    }
+    expect(created.data[0].cuerpo).toContain('devolvimos desde tu cuenta de Mercado Pago')
+    expect(created.data[0].cuerpo).not.toContain('Tenés que devolverle')
   })
 
   it('opens the owner reservations, where the closed booking is listed, from the push', async () => {

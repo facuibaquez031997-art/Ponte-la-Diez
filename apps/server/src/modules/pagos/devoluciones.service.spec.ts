@@ -125,6 +125,15 @@ describe('DevolucionesService.refund', () => {
     expect(prisma.historialReserva.updateMany).not.toHaveBeenCalled()
   })
 
+  it('never throws: the booking is already closed, so a database failure is just a failed refund', async () => {
+    const { service, prisma, gateway } = setup()
+    prisma.historialReserva.findUnique.mockRejectedValue(new Error('db down'))
+
+    await expect(service.refund('h1', now)).resolves.toBe('failed')
+
+    expect(gateway.refundPayment).not.toHaveBeenCalled()
+  })
+
   it('stays pending when Mercado Pago cannot be reached to read the payment', async () => {
     const { service, prisma, gateway } = setup()
     gateway.getPayment.mockRejectedValue(new Error('network down'))

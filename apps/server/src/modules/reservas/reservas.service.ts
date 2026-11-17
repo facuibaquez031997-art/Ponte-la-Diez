@@ -1,4 +1,5 @@
 import {
+  BadGatewayException,
   BadRequestException,
   ConflictException,
   Injectable,
@@ -17,6 +18,7 @@ import type {
 } from '@prisma/client'
 import { PrismaService } from '../../common/prisma/prisma.service.js'
 import { NotificationsService } from '../notifications/notifications.service.js'
+import { DevolucionesService } from '../pagos/devoluciones.service.js'
 import type { CreateReservaDto } from './dto/create-reserva.dto.js'
 import { type Blocked, findBlocked } from '../turnos/conflicts.js'
 import { HOLD_MS, releaseExpiredHolds } from './holds.js'
@@ -159,7 +161,8 @@ export class ReservasService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly notifications: NotificationsService
+    private readonly notifications: NotificationsService,
+    private readonly devoluciones: DevolucionesService
   ) {}
 
   async create(
@@ -309,7 +312,7 @@ export class ReservasService {
       throw new ConflictException('La reserva ya no está activa')
     }
 
-    const result = await this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx): Promise<CancelResult> => {
       // Compare and set on the state that was read: a webhook confirming the booking at the same
       // moment either wins before this point (and we stop) or finds nothing to confirm after it.
       const claimed = await tx.reserva.updateMany({
@@ -346,6 +349,13 @@ export class ReservasService {
       return { historialId: historial.id, montoPagado, devolucion }
     })
 
+    // The cancellation already happened: give the player the money back from the owner's account.
+    // A refund that fails stays pending and can be retried from the owner's screen.
+    if (result.devolucion === 'PENDIENTE') {
+      const refund = await this.devoluciones.refund(result.historialId, now)
+      if (refund === 'refunded' || refund === 'already_refunded') result.devolucion = 'HECHA'
+    }
+
     // The cancellation already happened: a failed notice must not undo or hide it.
     try {
       await this.notifications.notifyBookingCancelled({
@@ -353,6 +363,7 @@ export class ReservasService {
         canchaNombre: reserva.turno.cancha.nombre,
         turnoInicio: reserva.turno.fechaHoraInicio,
         montoPagado: result.montoPagado,
+        devuelta: result.devolucion === 'HECHA',
       })
     } catch (error) {
       this.logger.error(
@@ -374,27 +385,37 @@ export class ReservasService {
   }
 
   /**
-   * The owner says the refund was made (outside the app). Answers the same when it was already
-   * marked; refuses when the record had nothing to return.
+   * Retries a refund that stayed pending: the money goes back to the player from the owner's
+   * Mercado Pago account. Answers the same when it was already done; refuses when the record had
+   * nothing to return, and with 502 when Mercado Pago could not return it (it stays pending).
    */
-  async markRefunded(
+  async refundNow(
     ownerId: string,
     historialId: string,
     now: Date = new Date()
   ): Promise<HistorialView> {
-    const updated = await this.prisma.historialReserva.updateMany({
-      where: { id: historialId, devolucion: 'PENDIENTE', cancha: { ownerId } },
-      data: { devolucion: 'HECHA', devueltoAt: now },
-    })
+    const row = await this.findHistorial(ownerId, historialId)
+    if (row.devolucion === 'HECHA') return toHistorialView(row)
+    if (row.devolucion === 'NO_CORRESPONDE') {
+      throw new ConflictException('Esa reserva no tenía nada para devolver')
+    }
+
+    const outcome = await this.devoluciones.refund(historialId, now)
+    if (outcome === 'failed') {
+      throw new BadGatewayException(
+        'No pudimos hacer la devolución desde tu cuenta de Mercado Pago, probá de nuevo en un momento'
+      )
+    }
+    return toHistorialView(await this.findHistorial(ownerId, historialId))
+  }
+
+  private async findHistorial(ownerId: string, historialId: string) {
     const row = await this.prisma.historialReserva.findFirst({
       where: { id: historialId, cancha: { ownerId } },
       include: historialInclude,
     })
     // Another owner's record answers 404 so its existence is not revealed.
     if (!row) throw new NotFoundException('El registro no existe')
-    if (updated.count === 0 && row.devolucion === 'NO_CORRESPONDE') {
-      throw new ConflictException('Esa reserva no tenía nada para devolver')
-    }
-    return toHistorialView(row)
+    return row
   }
 }

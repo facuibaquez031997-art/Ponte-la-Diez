@@ -13,6 +13,7 @@ import { PrismaService } from '../../common/prisma/prisma.service.js'
 import { NotificationsService } from '../notifications/notifications.service.js'
 import { HOLD_MS, releaseExpiredHolds } from '../reservas/holds.js'
 import { findBlocked } from '../turnos/conflicts.js'
+import { DevolucionesService } from './devoluciones.service.js'
 import { DEFAULT_MARKETPLACE_FEE_PERCENT, computeMarketplaceFee } from './marketplace-fee.js'
 import { MercadoPagoGateway, type PreferenceResult } from './mercadopago.gateway.js'
 import { MpCuentaService } from './mp-cuenta.service.js'
@@ -40,7 +41,8 @@ export class PagosService {
     private readonly gateway: MercadoPagoGateway,
     private readonly notifications: NotificationsService,
     private readonly cuentas: MpCuentaService,
-    private readonly config: ConfigService
+    private readonly config: ConfigService,
+    private readonly devoluciones: DevolucionesService
   ) {}
 
   async createPreference(
@@ -220,6 +222,7 @@ export class PagosService {
 
     const pagoId = reserva.pago.id
     const { turno } = reserva
+    let closedHistorialId: string | undefined
     const outcome = await this.prisma.$transaction(
       async (tx): Promise<'confirmed' | 'conflict' | 'ignored'> => {
         // The same lock the bookings take: the payments of two linked courts for the same hour
@@ -248,7 +251,7 @@ export class PagosService {
         // A court that shares the space was confirmed first. The payment was approved, so the
         // booking is closed with the refund pending (like when the owner cancels) and its slot is
         // freed, instead of confirming two bookings for the same ground.
-        await tx.historialReserva.create({
+        const closed = await tx.historialReserva.create({
           data: {
             canchaId: turno.canchaId,
             jugadorId: reserva.userId,
@@ -262,6 +265,7 @@ export class PagosService {
             reservadaAt: reserva.createdAt,
           },
         })
+        closedHistorialId = closed.id
         await tx.pago.deleteMany({ where: { reservaId: reserva.id } })
         await tx.reserva.delete({ where: { id: reserva.id } })
         await tx.turno.update({ where: { id: reserva.turnoId }, data: { estado: 'FREE' } })
@@ -277,14 +281,20 @@ export class PagosService {
     }
     if (outcome === 'conflict') {
       this.logger.warn(
-        `Payment ${payment.id} was approved but the space of booking ${reserva.id} was confirmed for a court that shares it first: closed, refund pending`
+        `Payment ${payment.id} was approved but the space of booking ${reserva.id} was confirmed for a court that shares it first: closed, refunding`
       )
+      // The booking is already closed, so a refund that fails stays pending (and is retried from
+      // the owner's screen) instead of failing the webhook.
+      const refund = closedHistorialId
+        ? await this.devoluciones.refund(closedHistorialId)
+        : 'failed'
       await this.notifySpaceTaken({
         ownerId: turno.cancha.ownerId,
         jugadorId: reserva.userId,
         canchaNombre: turno.cancha.nombre,
         turnoInicio: turno.fechaHoraInicio,
         montoPagado: payment.transactionAmount,
+        devuelta: refund === 'refunded' || refund === 'already_refunded',
       })
       return 'conflict'
     }
@@ -299,6 +309,7 @@ export class PagosService {
     canchaNombre: string
     turnoInicio: Date
     montoPagado: number
+    devuelta: boolean
   }): Promise<void> {
     // The player and the owner are told separately: one notice failing must not hide the other.
     try {
@@ -307,6 +318,7 @@ export class PagosService {
         canchaNombre: data.canchaNombre,
         turnoInicio: data.turnoInicio,
         montoPagado: data.montoPagado,
+        devuelta: data.devuelta,
       })
     } catch (error) {
       this.logger.error(

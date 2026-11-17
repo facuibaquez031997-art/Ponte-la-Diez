@@ -41,11 +41,11 @@ export class ReservasController {
 
   @Patch('historial/:id/devolucion')
   @Roles('OWNER')
-  markRefunded(
+  refundNow(
     @CurrentUser() user: AuthUser,
     @Param('id', ParseUUIDPipe) id: string
   ): Promise<HistorialView> {
-    return this.reservas.markRefunded(user.id, id)
+    return this.reservas.refundNow(user.id, id)
   }
 
   @Post(':id/cancelar')

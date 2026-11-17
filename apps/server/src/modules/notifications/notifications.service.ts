@@ -188,6 +188,8 @@ export class NotificationsService {
     canchaNombre: string
     turnoInicio: Date
     montoPagado: number
+    /** The refund was already made through Mercado Pago. */
+    devuelta?: boolean
   }): Promise<void> {
     const jugador = await this.prisma.user.findUnique({
       where: { id: data.jugadorId },
@@ -197,7 +199,9 @@ export class NotificationsService {
 
     const refund =
       data.montoPagado > 0
-        ? `Te corresponde la devolución de ${formatPesos(data.montoPagado)}: el dueño la va a coordinar con vos.`
+        ? data.devuelta
+          ? `Te devolvimos ${formatPesos(data.montoPagado)} por Mercado Pago.`
+          : `Te corresponde la devolución de ${formatPesos(data.montoPagado)}: el dueño la va a coordinar con vos.`
         : 'No se te cobró nada.'
     const titulo = 'Turno cancelado'
     const cuerpo = `${data.canchaNombre} canceló tu turno del ${formatSlotLabel(data.turnoInicio)}. ${refund}`
@@ -267,6 +271,8 @@ export class NotificationsService {
     canchaNombre: string
     turnoInicio: Date
     montoPagado: number
+    /** The refund was already made through Mercado Pago. */
+    devuelta?: boolean
   }): Promise<void> {
     const jugador = await this.prisma.user.findUnique({
       where: { id: data.jugadorId },
@@ -274,8 +280,11 @@ export class NotificationsService {
     })
     if (!jugador) return
 
+    const refund = data.devuelta
+      ? `Te devolvimos ${formatPesos(data.montoPagado)} por Mercado Pago.`
+      : `Te corresponde la devolución de ${formatPesos(data.montoPagado)}: el dueño la va a coordinar con vos.`
     const titulo = 'No pudimos confirmar tu turno'
-    const cuerpo = `${data.canchaNombre}: el espacio del turno del ${formatSlotLabel(data.turnoInicio)} se confirmó para otra reserva justo antes que la tuya. Te corresponde la devolución de ${formatPesos(data.montoPagado)}: el dueño la va a coordinar con vos.`
+    const cuerpo = `${data.canchaNombre}: el espacio del turno del ${formatSlotLabel(data.turnoInicio)} se confirmó para otra reserva justo antes que la tuya. ${refund}`
 
     await this.prisma.notificacion.createMany({
       data: [{ userId: jugador.id, titulo, cuerpo, url: PLAYER_RESERVAS_URL }],
@@ -293,6 +302,8 @@ export class NotificationsService {
     canchaNombre: string
     turnoInicio: Date
     montoPagado: number
+    /** The refund was already made from the owner's Mercado Pago account. */
+    devuelta?: boolean
   }): Promise<void> {
     const [owner, jugador] = await Promise.all([
       this.prisma.user.findUnique({
@@ -304,7 +315,10 @@ export class NotificationsService {
     if (!owner || !jugador) return
 
     const titulo = 'Reserva cerrada: espacio ocupado'
-    const cuerpo = `${jugador.nombre} pagó ${formatPesos(data.montoPagado)} por ${data.canchaNombre} el ${formatSlotLabel(data.turnoInicio)}, pero otra cancha que comparte el espacio se confirmó antes. Tenés que devolverle ese monto: quedó anotado en "Vencidas y canceladas".`
+    const refund = data.devuelta
+      ? 'Ya se lo devolvimos desde tu cuenta de Mercado Pago: quedó anotado en "Vencidas y canceladas".'
+      : 'Tenés que devolverle ese monto: quedó anotado en "Vencidas y canceladas".'
+    const cuerpo = `${jugador.nombre} pagó ${formatPesos(data.montoPagado)} por ${data.canchaNombre} el ${formatSlotLabel(data.turnoInicio)}, pero otra cancha que comparte el espacio se confirmó antes. ${refund}`
 
     await this.prisma.notificacion.createMany({
       data: [{ userId: owner.id, titulo, cuerpo, url: OWNER_RESERVAS_URL }],
