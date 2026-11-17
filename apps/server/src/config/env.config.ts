@@ -2,6 +2,7 @@ import { plainToInstance } from 'class-transformer'
 import {
   IsBooleanString,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
   Matches,
@@ -82,6 +83,13 @@ export class EnvironmentVariables {
   @IsOptional()
   @IsString()
   MP_REDIRECT_URI?: string
+
+  /** Platform commission over each amount charged, 0 to 100. Defaults to 10. */
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  MP_MARKETPLACE_FEE_PERCENT?: number
 
   /** 32 bytes as 64 hex characters (`openssl rand -hex 32`). Encrypts the owners' tokens. */
   @IsOptional()

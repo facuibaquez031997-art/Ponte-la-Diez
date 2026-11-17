@@ -7,12 +7,15 @@ import {
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common'
+import { ConfigService } from '@nestjs/config'
 import { formatSlotLabel } from '../../common/format.js'
 import { PrismaService } from '../../common/prisma/prisma.service.js'
 import { NotificationsService } from '../notifications/notifications.service.js'
 import { HOLD_MS, releaseExpiredHolds } from '../reservas/holds.js'
 import { findBlocked } from '../turnos/conflicts.js'
+import { DEFAULT_MARKETPLACE_FEE_PERCENT, computeMarketplaceFee } from './marketplace-fee.js'
 import { MercadoPagoGateway, type PreferenceResult } from './mercadopago.gateway.js'
+import { MpCuentaService } from './mp-cuenta.service.js'
 import { verifyWebhookSignature } from './webhook-signature.js'
 
 export type NotificationResult = 'confirmed' | 'duplicate' | 'ignored' | 'conflict'
@@ -31,7 +34,9 @@ export class PagosService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly gateway: MercadoPagoGateway,
-    private readonly notifications: NotificationsService
+    private readonly notifications: NotificationsService,
+    private readonly cuentas: MpCuentaService,
+    private readonly config: ConfigService
   ) {}
 
   async createPreference(
@@ -73,13 +78,26 @@ export class PagosService {
 
     let preference: PreferenceResult
     try {
-      preference = await this.gateway.createPreference({
-        reservaId: reserva.id,
-        title: `Reserva ${reserva.turno.cancha.nombre} - ${formatSlotLabel(reserva.turno.fechaHoraInicio)}`,
-        monto: reserva.pago.monto,
-        expiresAt,
-      })
+      // The money goes to the owner's account, so the owner must have linked it.
+      const ownerAccessToken = await this.cuentas.getAccessToken(turno.cancha.ownerId, now)
+      const percent =
+        this.config.get<number>('MP_MARKETPLACE_FEE_PERCENT') ?? DEFAULT_MARKETPLACE_FEE_PERCENT
+      preference = await this.gateway.createPreference(
+        {
+          reservaId: reserva.id,
+          title: `Reserva ${reserva.turno.cancha.nombre} - ${formatSlotLabel(reserva.turno.fechaHoraInicio)}`,
+          monto: reserva.pago.monto,
+          expiresAt,
+          marketplaceFee: computeMarketplaceFee(reserva.pago.monto, percent),
+        },
+        ownerAccessToken
+      )
     } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw new ConflictException(
+          'El dueño de esta cancha todavía no puede recibir pagos con Mercado Pago'
+        )
+      }
       this.logger.error(`Mercado Pago preference failed for booking ${reserva.id}`, error)
       throw new BadGatewayException('No pudimos iniciar el pago, intentá de nuevo en un momento')
     }

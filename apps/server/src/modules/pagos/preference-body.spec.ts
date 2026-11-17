@@ -42,6 +42,15 @@ describe('buildPreferenceBody', () => {
     expect(withUrl.notification_url).toBe('https://abc.ngrok.app/api/pagos/webhook')
   })
 
+  it('sends the marketplace fee in pesos only when there is one to take', () => {
+    const urls = { clientUrl: 'http://localhost:5173' }
+    expect(buildPreferenceBody(input, urls)).not.toHaveProperty('marketplace_fee')
+    expect(buildPreferenceBody({ ...input, marketplaceFee: 500 }, urls).marketplace_fee).toBe(500)
+    expect(buildPreferenceBody({ ...input, marketplaceFee: 0 }, urls)).not.toHaveProperty(
+      'marketplace_fee'
+    )
+  })
+
   it('asks for the automatic return only when the client URL is https', () => {
     const local = buildPreferenceBody(input, { clientUrl: 'http://localhost:5173' })
     expect(local).not.toHaveProperty('auto_return')

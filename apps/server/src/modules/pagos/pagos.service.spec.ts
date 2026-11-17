@@ -93,15 +93,32 @@ const makeNotifications = () => ({
   notifyOwnerSpaceTaken: vi.fn(async (_data?: object) => undefined),
 })
 
+const makeCuentas = () => ({
+  getAccessToken: vi.fn(async (_ownerId?: string) => 'owner-token'),
+})
+
+const makeConfig = (values: Record<string, unknown> = {}) => ({
+  get: vi.fn((name: string) => values[name]),
+})
+
 const build = (
   prisma = makePrisma(),
   gateway = makeGateway(),
-  notifications = makeNotifications()
+  notifications = makeNotifications(),
+  cuentas = makeCuentas(),
+  config = makeConfig()
 ) => ({
   prisma,
   gateway,
   notifications,
-  service: new PagosService(prisma as never, gateway as never, notifications as never),
+  cuentas,
+  service: new PagosService(
+    prisma as never,
+    gateway as never,
+    notifications as never,
+    cuentas as never,
+    config as never
+  ),
 })
 
 describe('PagosService.createPreference', () => {
@@ -126,6 +143,60 @@ describe('PagosService.createPreference', () => {
       where: { id: 'p1' },
       data: { mpPreferenceId: 'pref-1' },
     })
+  })
+
+  it("charges on the owner's account with the platform commission of 10% by default", async () => {
+    const { service, gateway, cuentas } = build()
+    await service.createPreference('u1', 'r1', now)
+    expect(cuentas.getAccessToken).toHaveBeenCalledWith('o1', now)
+    const [input, accessToken] = gateway.createPreference.mock.calls[0] as unknown as [
+      { monto: number; marketplaceFee: number },
+      string,
+    ]
+    expect(accessToken).toBe('owner-token')
+    expect(input.monto).toBe(5000)
+    expect(input.marketplaceFee).toBe(500)
+  })
+
+  it('takes the commission percentage from the configuration', async () => {
+    const { service, gateway } = build(
+      makePrisma(),
+      makeGateway(),
+      makeNotifications(),
+      makeCuentas(),
+      makeConfig({ MP_MARKETPLACE_FEE_PERCENT: 15 })
+    )
+    await service.createPreference('u1', 'r1', now)
+    const [input] = gateway.createPreference.mock.calls[0] as unknown as [
+      { marketplaceFee: number },
+    ]
+    expect(input.marketplaceFee).toBe(750)
+  })
+
+  it('blocks the payment when the owner has not linked a Mercado Pago account', async () => {
+    const cuentas = makeCuentas()
+    cuentas.getAccessToken.mockRejectedValue(new NotFoundException('sin cuenta'))
+    const { service, prisma, gateway } = build(
+      makePrisma(),
+      makeGateway(),
+      makeNotifications(),
+      cuentas
+    )
+    await expect(service.createPreference('u1', 'r1', now)).rejects.toBeInstanceOf(
+      ConflictException
+    )
+    expect(gateway.createPreference).not.toHaveBeenCalled()
+    expect(prisma.pago.update).not.toHaveBeenCalled()
+  })
+
+  it('answers 502 when the owner token cannot be renewed', async () => {
+    const cuentas = makeCuentas()
+    cuentas.getAccessToken.mockRejectedValue(new Error('invalid_grant'))
+    const { service, gateway } = build(makePrisma(), makeGateway(), makeNotifications(), cuentas)
+    await expect(service.createPreference('u1', 'r1', now)).rejects.toBeInstanceOf(
+      BadGatewayException
+    )
+    expect(gateway.createPreference).not.toHaveBeenCalled()
   })
 
   it('answers 503 when Mercado Pago is not configured, without touching the database', async () => {

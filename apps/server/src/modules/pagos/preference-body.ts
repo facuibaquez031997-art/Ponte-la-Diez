@@ -5,6 +5,8 @@ export interface PreferenceInput {
   monto: number
   /** The checkout stops accepting payments at this moment (end of the booking hold). */
   expiresAt: Date
+  /** The platform's commission in pesos, taken from the amount charged on the owner's account. */
+  marketplaceFee?: number
 }
 
 export interface PreferenceUrls {
@@ -21,6 +23,7 @@ export interface PreferenceBody {
   expiration_date_to: string
   notification_url?: string
   auto_return?: 'approved'
+  marketplace_fee?: number
 }
 
 export const RESULT_PATH = '/reservas/resultado'
@@ -46,5 +49,6 @@ export function buildPreferenceBody(input: PreferenceInput, urls: PreferenceUrls
     // Mercado Pago rejects the automatic return when the back URL is not https.
     ...(clientUrl.startsWith('https://') ? { auto_return: 'approved' as const } : {}),
     ...(urls.notificationUrl ? { notification_url: urls.notificationUrl } : {}),
+    ...(input.marketplaceFee ? { marketplace_fee: input.marketplaceFee } : {}),
   }
 }

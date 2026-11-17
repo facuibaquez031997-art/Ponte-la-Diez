@@ -62,10 +62,20 @@ export class MercadoPagoGateway {
     }
   }
 
-  async createPreference(input: PreferenceInput): Promise<PreferenceResult> {
-    if (!this.client) throw new Error('Mercado Pago is not configured')
+  /**
+   * Creates the checkout on the owner's account (`ownerAccessToken`), so the money goes to the
+   * owner and Mercado Pago keeps `input.marketplaceFee` for the platform.
+   */
+  async createPreference(
+    input: PreferenceInput,
+    ownerAccessToken: string
+  ): Promise<PreferenceResult> {
+    const ownerClient = new MercadoPagoConfig({
+      accessToken: ownerAccessToken,
+      options: { timeout: 8000 },
+    })
 
-    const response = await new Preference(this.client).create({
+    const response = await new Preference(ownerClient).create({
       body: buildPreferenceBody(input, {
         clientUrl: this.clientUrl,
         notificationUrl: this.notificationUrl,
