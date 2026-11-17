@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
-import { MercadoPagoConfig, Payment, Preference } from 'mercadopago'
+import { MercadoPagoConfig, Payment, PaymentRefund, Preference } from 'mercadopago'
 import { type PreferenceInput, buildPreferenceBody } from './preference-body.js'
 
 export interface PaymentInfo {
@@ -65,6 +65,26 @@ export class MercadoPagoGateway {
       if ((error as { status?: number }).status === 404) return null
       throw error
     }
+  }
+
+  /**
+   * Refunds the whole payment from the owner's account. `idempotencyKey` makes a retry of the same
+   * refund safe: Mercado Pago answers it instead of refunding again.
+   */
+  async refundPayment(
+    paymentId: string,
+    ownerAccessToken: string,
+    idempotencyKey: string
+  ): Promise<void> {
+    const ownerClient = new MercadoPagoConfig({
+      accessToken: ownerAccessToken,
+      options: { timeout: 8000 },
+    })
+    // No amount in the body: Mercado Pago refunds the full payment.
+    await new PaymentRefund(ownerClient).create({
+      payment_id: paymentId,
+      requestOptions: { idempotencyKey },
+    })
   }
 
   /**
