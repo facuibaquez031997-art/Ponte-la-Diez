@@ -74,6 +74,20 @@ model User {
   historialReservas  HistorialReserva[]
   conversaciones     Conversacion[]
   mensajes           Mensaje[]
+  mpCuenta           MpCuenta?
+}
+
+/// Mercado Pago account an OWNER linked through OAuth. Tokens are stored encrypted (AES-256-GCM).
+model MpCuenta {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mpUserId        String
+  accessTokenEnc  String
+  refreshTokenEnc String
+  expiresAt       DateTime
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }
 
 model Contacto {
