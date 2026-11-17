@@ -4,6 +4,7 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  Matches,
   Max,
   Min,
   MinLength,
@@ -69,6 +70,23 @@ export class EnvironmentVariables {
   @IsOptional()
   @IsString()
   MP_NOTIFICATION_URL?: string
+
+  @IsOptional()
+  @IsString()
+  MP_CLIENT_ID?: string
+
+  @IsOptional()
+  @IsString()
+  MP_CLIENT_SECRET?: string
+
+  @IsOptional()
+  @IsString()
+  MP_REDIRECT_URI?: string
+
+  /** 32 bytes as 64 hex characters (`openssl rand -hex 32`). Encrypts the owners' tokens. */
+  @IsOptional()
+  @Matches(/^[0-9a-fA-F]{64}$/)
+  MP_TOKEN_ENCRYPTION_KEY?: string
 
   @IsOptional()
   @IsString()
