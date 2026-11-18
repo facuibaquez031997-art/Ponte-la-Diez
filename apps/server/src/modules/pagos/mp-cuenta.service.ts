@@ -64,6 +64,15 @@ export class MpCuentaService {
     }
   }
 
+  /** Whether the owner linked an account. Only the fact is exposed, never the tokens. */
+  async getStatus(ownerId: string): Promise<{ linked: boolean }> {
+    const account = await this.prisma.mpCuenta.findUnique({
+      where: { userId: ownerId },
+      select: { id: true },
+    })
+    return { linked: account !== null }
+  }
+
   /** The owner's access token, renewed first when it is about to expire. */
   async getAccessToken(ownerId: string, now: Date = new Date()): Promise<string> {
     const account = await this.prisma.mpCuenta.findUnique({ where: { userId: ownerId } })

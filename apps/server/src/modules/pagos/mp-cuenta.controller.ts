@@ -6,8 +6,8 @@ import { Public } from '../auth/decorators/public.decorator.js'
 import { Roles } from '../auth/decorators/roles.decorator.js'
 import { MpCuentaService } from './mp-cuenta.service.js'
 
-/** Where the owner lands after the consent screen; the page itself is built in the client task. */
-const OWNER_ACCOUNT_PATH = '/owner/mercadopago'
+/** Where the owner lands after the consent screen: the client's Mercado Pago account page. */
+const OWNER_ACCOUNT_PATH = '/dueno/mercadopago'
 
 @Controller('pagos/mp')
 export class MpCuentaController {
@@ -15,6 +15,13 @@ export class MpCuentaController {
     private readonly cuentas: MpCuentaService,
     private readonly config: ConfigService
   ) {}
+
+  /** Whether the logged in owner already linked a Mercado Pago account. */
+  @Get('status')
+  @Roles('OWNER')
+  status(@CurrentUser() user: AuthUser): Promise<{ linked: boolean }> {
+    return this.cuentas.getStatus(user.id)
+  }
 
   /** Returns the Mercado Pago consent URL; the client navigates there. */
   @Get('authorize')

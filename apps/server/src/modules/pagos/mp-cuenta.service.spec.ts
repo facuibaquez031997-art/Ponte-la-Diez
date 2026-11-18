@@ -122,6 +122,27 @@ describe('MpCuentaService.handleCallback', () => {
   })
 })
 
+describe('MpCuentaService.getStatus', () => {
+  it('says the owner is linked without exposing any token', async () => {
+    const { service, prisma } = setup()
+    prisma.mpCuenta.findUnique.mockResolvedValue(linkedAccount(inMinutes(60)))
+
+    const status = await service.getStatus('o1')
+
+    expect(status).toEqual({ linked: true })
+    expect(prisma.mpCuenta.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { userId: 'o1' } })
+    )
+  })
+
+  it('says the owner is not linked when there is no account', async () => {
+    const { service, prisma } = setup()
+    prisma.mpCuenta.findUnique.mockResolvedValue(null)
+
+    await expect(service.getStatus('o1')).resolves.toEqual({ linked: false })
+  })
+})
+
 describe('MpCuentaService.getAccessToken', () => {
   it('returns the stored token without refreshing while it is far from expiring', async () => {
     const { service, oauth, prisma } = setup()

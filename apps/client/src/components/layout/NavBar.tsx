@@ -19,6 +19,7 @@ const OWNER_LINKS = [
   { label: 'Mis canchas', to: '/dueno' },
   { label: 'Agenda', to: '/dueno/agenda' },
   { label: 'Reservas', to: '/dueno/reservas' },
+  { label: 'Cobros', to: '/dueno/mercadopago' },
   { label: 'Mensajes', to: '/mensajes' },
 ]
 

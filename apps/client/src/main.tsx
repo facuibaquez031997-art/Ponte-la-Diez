@@ -12,6 +12,7 @@ import RegisterPage from './pages/Auth/RegisterPage'
 import OwnerAgendaPage from './pages/Owner/OwnerAgendaPage'
 import OwnerCanchasPage from './pages/Owner/OwnerCanchasPage'
 import OwnerHorariosPage from './pages/Owner/OwnerHorariosPage'
+import OwnerMercadoPagoPage from './pages/Owner/OwnerMercadoPagoPage'
 import OwnerReservasPage from './pages/Owner/OwnerReservasPage'
 import HomePage from './pages/Home/HomePage'
 import MensajesPage from './pages/Mensajes/MensajesPage'
@@ -51,6 +52,7 @@ const router = createBrowserRouter([
           { path: 'dueno/canchas/:id/horarios', element: <OwnerHorariosPage /> },
           { path: 'dueno/reservas', element: <OwnerReservasPage /> },
           { path: 'dueno/agenda', element: <OwnerAgendaPage /> },
+          { path: 'dueno/mercadopago', element: <OwnerMercadoPagoPage /> },
         ],
       },
       { path: 'login', element: <LoginPage /> },
