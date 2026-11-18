@@ -17,7 +17,7 @@ Branch: feat/marketplace-mp (from feat/bloqueo-al-pagar) · Delivery: ask-on-ris
 - T2 · S1, S2 · inline · Create the preference with the owner's token and `marketplace_fee` = 10% of the charged amount; block payment when the owner is not linked · commit: d287e78
 - T3 · S2 · inline · Webhook and `getPayment` read the payment with the owner's token (open question: how to find the owner from the notification; verify against Mercado Pago docs first) · commit: f082ca1
 - T4 · S2 · inline · Refunds from the owner's account through the API (owner cancellation and ESPACIO_OCUPADO), replacing the manual "devolución hecha" · commit: 79b2793 (refund service + gateway), f250317 (wired into cancel, shared-space closure and the owner button)
-- T5 · S2 · inline · Client: owner "Cuenta Mercado Pago vinculada" screen (Stitch), link status, docs and PENDIENTES update · commit: pending
+- T5 · S2 · inline · Client: owner "Cuenta Mercado Pago vinculada" screen (Stitch), link status, docs and PENDIENTES update · commit: 883b705 (link screen, GET /pagos/mp/status, callback now redirects to /dueno/mercadopago), b5003bd (Reintentar devolución button and refund texts) · real link, payment and refund still untested: Mercado Pago was down on 2026-11-18
 
 ## Log
 
