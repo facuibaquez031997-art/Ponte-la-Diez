@@ -30,7 +30,7 @@ const Stat = ({ label, value, detail, danger = false }: StatProps) => (
 
 const cancelMessage = (reserva: OwnerReserva): string =>
   reserva.montoPagado > 0
-    ? `El turno vuelve a quedar libre y le avisamos a ${reserva.jugador.nombre}. Vos tenés que devolverle ${formatPesos(reserva.montoPagado)} por fuera de la app: te queda anotado como devolución pendiente.`
+    ? `El turno vuelve a quedar libre y le avisamos a ${reserva.jugador.nombre}. Le devolvemos ${formatPesos(reserva.montoPagado)} desde tu cuenta de Mercado Pago.`
     : `El turno vuelve a quedar libre. ${reserva.jugador.nombre} todavía no había pagado, así que no hay nada que devolver.`
 
 const OwnerReservasPage = () => {
@@ -66,19 +66,22 @@ const OwnerReservasPage = () => {
     if (!target) return
     void run(async () => {
       const result = await reservasService.cancel(target.id)
-      return result.devolucion === 'PENDIENTE'
-        ? `Cancelaste el turno. Te queda anotada la devolución de ${formatPesos(result.montoPagado)} a ${target.jugador.nombre}.`
+      if (result.devolucion === 'PENDIENTE') {
+        return `Cancelaste el turno, pero no pudimos devolverle ${formatPesos(result.montoPagado)} a ${target.jugador.nombre} desde tu cuenta de Mercado Pago. Reintentá la devolución en "Vencidas y canceladas".`
+      }
+      return result.devolucion === 'HECHA'
+        ? `Cancelaste el turno y le devolvimos ${formatPesos(result.montoPagado)} a ${target.jugador.nombre}.`
         : 'Cancelaste el turno. Ya está libre para que otro jugador lo reserve.'
     })
   }
 
-  const handleRefunded = () => {
+  const handleRetryRefund = () => {
     const target = refunding
     setRefunding(null)
     if (!target) return
     void run(async () => {
-      await reservasService.markRefunded(target.id)
-      return `Anotamos que le devolviste ${formatPesos(target.montoPagado)} a ${target.jugador.nombre}.`
+      await reservasService.refundNow(target.id)
+      return `Le devolvimos ${formatPesos(target.montoPagado)} a ${target.jugador.nombre} desde tu cuenta de Mercado Pago.`
     })
   }
 
@@ -132,7 +135,7 @@ const OwnerReservasPage = () => {
               <Stat
                 label="Ya devuelto"
                 value={formatPesos(summary.refunded)}
-                detail="devoluciones que hiciste"
+                detail="devoluciones hechas"
               />
               <Stat
                 label="Ganancia neta"
@@ -221,7 +224,7 @@ const OwnerReservasPage = () => {
                   <HistorialRow
                     key={item.id}
                     item={item}
-                    onMarkRefunded={setRefunding}
+                    onRetryRefund={setRefunding}
                     disabled={busy}
                   />
                 ))}
@@ -242,15 +245,15 @@ const OwnerReservasPage = () => {
       />
       <ConfirmDialog
         open={refunding !== null}
-        title="Devolución hecha"
+        title="Reintentar devolución"
         message={
           refunding
-            ? `¿Ya le devolviste ${formatPesos(refunding.montoPagado)} a ${refunding.jugador.nombre}? Esto no se puede deshacer.`
+            ? `Vamos a devolverle ${formatPesos(refunding.montoPagado)} a ${refunding.jugador.nombre} desde tu cuenta de Mercado Pago. Esto no se puede deshacer.`
             : ''
         }
-        confirmLabel="Sí, ya lo devolví"
+        confirmLabel="Sí, devolver"
         cancelLabel="Todavía no"
-        onConfirm={handleRefunded}
+        onConfirm={handleRetryRefund}
         onCancel={() => setRefunding(null)}
       />
     </main>

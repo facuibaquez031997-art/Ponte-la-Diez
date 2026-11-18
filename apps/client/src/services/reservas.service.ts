@@ -13,6 +13,7 @@ export const reservasService = {
   listForOwner: () => api.get<OwnerReserva[]>('/reservas/owner').then((r) => r.data),
   listHistorial: () => api.get<HistorialItem[]>('/reservas/owner/historial').then((r) => r.data),
   cancel: (id: string) => api.post<CancelResult>(`/reservas/${id}/cancelar`).then((r) => r.data),
-  markRefunded: (id: string) =>
+  /** Refunds the player from the owner's Mercado Pago account (retry of a pending refund). */
+  refundNow: (id: string) =>
     api.patch<HistorialItem>(`/reservas/historial/${id}/devolucion`).then((r) => r.data),
 }
